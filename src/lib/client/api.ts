@@ -5,10 +5,13 @@ import { getFirebaseAuth } from '@/lib/firebase/client';
 export async function adminFetch(path: string, init?: RequestInit): Promise<Response> {
   const user = getFirebaseAuth().currentUser;
   const token = user ? await user.getIdToken() : null;
+  // Let the browser set the multipart boundary itself when uploading files —
+  // forcing application/json on a FormData body breaks req.formData().
+  const isFormBody = typeof FormData !== 'undefined' && init?.body instanceof FormData;
   return fetch(path, {
     ...init,
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormBody ? {} : { 'Content-Type': 'application/json' }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init?.headers ?? {}),
     },

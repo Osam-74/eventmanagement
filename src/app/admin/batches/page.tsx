@@ -14,6 +14,23 @@ type Batch = {
   createdAt: string | null;
 };
 
+/**
+ * Firestore's missing-index error embeds a direct console creation link —
+ * render any URLs in the error message as clickable links.
+ */
+function linkify(text: string) {
+  const parts = text.split(/(https?:\/\/\S+)/g);
+  return parts.map((part, i) =>
+    /^https?:\/\//.test(part) ? (
+      <a key={i} href={part} target="_blank" rel="noreferrer" className="break-all underline">
+        {part}
+      </a>
+    ) : (
+      <span key={i}>{part}</span>
+    )
+  );
+}
+
 export default function BatchesPage() {
   const { eventId } = useSelectedEvent();
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -53,7 +70,7 @@ export default function BatchesPage() {
       <h2 className="mb-3 font-semibold">Batches</h2>
       {error && (
         <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error} <button onClick={load} className="underline">Retry</button>
+          {linkify(error)} <button onClick={load} className="underline">Retry</button>
         </p>
       )}
       <table className="w-full text-sm">

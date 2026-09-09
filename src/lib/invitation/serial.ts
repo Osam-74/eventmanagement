@@ -13,5 +13,5 @@ export function formatSerial(eventCode: string, sequence: number): string {
 
 export function eventCodeFromSlug(slug: string): string {
   const letters = slug.replace(/[^a-zA-Z]/g, '').toUpperCase();
-  return (letters || 'EVT').slice(0, 6);
+  return (letters || 'EVT').slice(0, 5);
 }

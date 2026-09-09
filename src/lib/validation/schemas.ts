@@ -65,11 +65,24 @@ export const usherSigninSchema = z.object({
   pin: z.string().regex(/^\d{6,10}$/),
 });
 
-export const generateBatchSchema = z.object({
-  eventId: z.string().min(4),
-  quantity: z.number().int().min(1).max(50),
-  profile: z.enum(['share', 'hq']).default('share'),
-});
+// Serverless time/memory safety: share-profile renders are fast, but each
+// 8K HQ render is heavy. HQ batches are capped at 20 cards per request —
+// run multiple batches instead of gambling on a plan's maxDuration.
+export const generateBatchSchema = z
+  .object({
+    eventId: z.string().min(4),
+    quantity: z.number().int().min(1).max(50),
+    profile: z.enum(['share', 'hq']).default('share'),
+  })
+  .superRefine((v, ctx) => {
+    if (v.profile === 'hq' && v.quantity > 20) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['quantity'],
+        message: 'HQ (8K) batches are capped at 20 cards per request. Run multiple batches or use the share profile.',
+      });
+    }
+  });
 
 export const revokeInvitationSchema = z.object({
   reason: z.string().max(300).default(''),

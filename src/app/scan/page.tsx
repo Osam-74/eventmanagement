@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Html5Qrcode } from 'html5-qrcode';
+import { shouldSubmitToken } from '@/lib/client/scanClient';
 
 type UsherEvent = { id: string; name: string; slug: string };
 
@@ -137,10 +138,7 @@ export default function ScannerPage() {
 
   async function submitToken(token: string, gateId?: string | null) {
     const now = Date.now();
-    if (
-      busyRef.current ||
-      (lastTokenRef.current.token === token && now - lastTokenRef.current.at < 5000)
-    ) {
+    if (!shouldSubmitToken({ busy: busyRef.current, lastToken: lastTokenRef.current.token, lastAt: lastTokenRef.current.at }, token, now)) {
       return;
     }
     busyRef.current = true;

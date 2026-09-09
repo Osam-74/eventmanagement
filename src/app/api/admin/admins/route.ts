@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth, db } from '@/lib/firebase/admin';
 import { createAdminSchema } from '@/lib/validation/schemas';
-import { badRequest, hasPermission, requirePermission, serverError, emptyPermissions } from '@/lib/api/helpers';
-import { writeAudit } from '@/lib/audit';
-import { ALL_PERMISSIONS, type Permission } from '@/lib/types';
-import { FieldValue } from 'firebase-admin/firestore';
+import { requirePermission } from '@/lib/api/helpers';
+import { createAdminAccount } from '@/lib/services/admins';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -24,41 +22,33 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const res = await requirePermission(req, 'canManageAdmins');
   if ('error' in res) return res.error;
-  const admin = res.admin;
 
   const parsed = createAdminSchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return badRequest(parsed.error.issues[0]?.message ?? 'Invalid input');
+  if (!parsed.success) return NextResponse.json({ ok: false, message: 'Invalid input' }, { status: 400 });
   const { email, password, displayName, permissions } = parsed.data;
 
-  // Anti-escalation: can only grant canManageAdmins if you have it yourself.
-  const granted: Record<Permission, boolean> = emptyPermissions();
-  for (const p of ALL_PERMISSIONS) {
-    if (permissions[p as keyof typeof permissions]) {
-      if (p === 'canManageAdmins' && !hasPermission(admin, 'canManageAdmins')) continue;
-      granted[p] = true;
-    }
-  }
-
-  let user;
-  try {
-    user = await auth().createUser({ email, password, displayName, emailVerified: true });
-  } catch (e) {
-    return badRequest(`Could not create auth user: ${(e as Error).message}`);
-  }
-
-  const doc = {
+  const result = await createAdminAccount(db(), {
+    actor: {
+      uid: res.admin.uid,
+      email: res.admin.email,
+      displayName: res.admin.displayName,
+      accountType: res.admin.accountType,
+      permissions: res.admin.permissions,
+    },
     email,
     displayName,
-    accountType: 'ADMIN' as const,
-    active: true,
-    permissions: granted,
-    createdAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp(),
-    createdBy: admin.uid,
-  };
-  await db().collection('users').doc(user.uid).set(doc);
-  await auth().setCustomUserClaims(user.uid, { admin: true });
-  await writeAudit('ADMIN_CREATED', admin.uid, { newAdminUid: user.uid, email, permissions: granted });
+    permissions,
+    createAuthUser: async (em, dn) => {
+      const user = await auth().createUser({ email: em, password, displayName: dn, emailVerified: true });
+      return user.uid;
+    },
+    setAdminClaim: async (uid) => {
+      await auth().setCustomUserClaims(uid, { admin: true });
+    },
+  });
 
-  return NextResponse.json({ ok: true, uid: user.uid });
+  if (!result.ok) {
+    return NextResponse.json({ ok: false, message: result.message }, { status: result.code === 'FORBIDDEN' ? 403 : 400 });
+  }
+  return NextResponse.json({ ok: true, uid: result.uid });
 }

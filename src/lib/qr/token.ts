@@ -12,5 +12,5 @@ export function generateQrToken(): string {
 }
 
 export function isPlausibleToken(token: string): boolean {
-  return /^IS26\.[A-Za-z0-9_-]{40,}$/.test(token);
+  return /^IS26\.[A-Za-z0-9_-]{40,100}$/.test(token);
 }

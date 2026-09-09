@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase/admin';
 import { verifyUsherSessionToken } from '@/lib/auth/usherSession';
+import { verifyUsherActive } from '@/lib/services/usherAuth';
 import { heartbeatSchema } from '@/lib/validation/schemas';
 import { FieldValue } from 'firebase-admin/firestore';
 
@@ -10,6 +11,11 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: NextRequest) {
   const session = verifyUsherSessionToken(req.cookies.get('usher_session')?.value);
   if (!session) return NextResponse.json({ ok: false }, { status: 401 });
+
+  // A disabled usher must fail every protected operation, even from an
+  // already-open scanner — including heartbeats.
+  const usher = await verifyUsherActive(db(), session.usherId);
+  if (!usher) return NextResponse.json({ ok: false, message: 'disabled' }, { status: 401 });
 
   const parsed = heartbeatSchema.safeParse(await req.json().catch(() => ({})));
   const gateId = parsed.success ? parsed.data.gateId ?? null : null;

@@ -80,6 +80,14 @@ USHER_SESSION_SECRET=<openssl rand -hex 32>                   # generate fresh, 
 3. Deploy. Verify the functions' region in Vercel dashboard (see §1).
 4. Deploy Firestore security rules: `firebase deploy --only firestore:rules`
    (repo `firestore.rules` — the deny-all rules tested in CI).
+5. **Deploy Firestore composite indexes:** `firebase deploy --only firestore:indexes`
+   (repo `firestore.indexes.json`). **This step is easy to miss because the Firestore
+   emulator (what CI runs against) does not enforce composite indexes — a compound
+   query like batches' `where eventId == … orderBy createdAt` can pass every test and
+   still fail in real production Firestore with a "query requires an index" error
+   until this is deployed.** Confirm in the Firebase console → Firestore → Indexes
+   that all indexes show status "Enabled" (not "Building") before relying on any
+   admin list page (Batches, Scan logs, Invitations, Ushers).
 
 ### C. Bootstrap (once, after deploy)
 

@@ -14,3 +14,4 @@ public/sw*
 public/swe-worker*
 firestore-debug.log
 firebase-debug.log
+tsconfig.tsbuildinfo

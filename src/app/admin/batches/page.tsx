@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { adminFetch, adminJson } from '@/lib/client/api';
+import { adminFetch } from '@/lib/client/api';
 import { useSelectedEvent } from '@/lib/client/useAdmin';
 
 type Batch = {
@@ -17,10 +17,20 @@ type Batch = {
 export default function BatchesPage() {
   const { eventId } = useSelectedEvent();
   const [batches, setBatches] = useState<Batch[]>([]);
+  const [error, setError] = useState('');
 
-  const load = () =>
-    adminJson<{ ok: boolean; batches: Batch[] }>(`/api/admin/batches?eventId=${eventId}`)
-      .then((r) => setBatches(r.batches ?? []));
+  // Deliberately not using adminJson here: it swallows non-OK responses into
+  // {} on error, which previously showed as a misleading "No batches yet"
+  // even when the real cause was a server error (e.g. a missing Firestore
+  // composite index) — surface the actual message instead.
+  const load = async () => {
+    setError('');
+    const res = await adminFetch(`/api/admin/batches?eventId=${eventId}`).catch(() => null);
+    if (!res) { setError('Could not reach the server. Check your connection and try again.'); return; }
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) { setError(body.message ?? `Failed to load batches (HTTP ${res.status}).`); return; }
+    setBatches(body.batches ?? []);
+  };
 
   useEffect(() => { if (eventId) load(); }, [eventId]);
 
@@ -41,6 +51,11 @@ export default function BatchesPage() {
   return (
     <div className="rounded-xl bg-white p-4 shadow-sm">
       <h2 className="mb-3 font-semibold">Batches</h2>
+      {error && (
+        <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error} <button onClick={load} className="underline">Retry</button>
+        </p>
+      )}
       <table className="w-full text-sm">
         <tbody>
           {batches.map((b) => (

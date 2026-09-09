@@ -54,3 +54,14 @@ jobs:
           QR_TOKEN_HMAC_KEY: 'ci-test-secret-key-for-hmac-32bytes!!'
           USHER_PIN_PEPPER: 'ci-test-pin-pepper'
           USHER_SESSION_SECRET: 'ci-test-session-secret'
+      # PWA e2e: production build served by `next start` against the
+      # emulator, driven by headless Chromium (routing, auth gates,
+      # offline behaviour, SW cache policy).
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run PWA e2e tests (Firestore emulator)
+        run: npx firebase emulators:exec --project demo-eventaccess --only firestore "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:pwa"
+        env:
+          QR_TOKEN_HMAC_KEY: 'ci-test-secret-key-for-hmac-32bytes!!'
+          USHER_PIN_PEPPER: 'ci-test-pin-pepper'
+          USHER_SESSION_SECRET: 'ci-test-session-secret'

@@ -1,10 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import type { Html5Qrcode } from 'html5-qrcode';
 import { shouldSubmitToken } from '@/lib/client/scanClient';
-
-type UsherEvent = { id: string; name: string; slug: string };
 
 type SessionInfo = {
   usherName: string;
@@ -43,27 +42,22 @@ function beep(good: boolean) {
 }
 
 export default function ScannerPage() {
-  // ---- sign-in state ----
-  const [events, setEvents] = useState<UsherEvent[]>([]);
-  const [eventId, setEventId] = useState('');
-  const [name, setName] = useState('');
-  const [pin, setPin] = useState('');
-  const [signinError, setSigninError] = useState('');
+  const router = useRouter();
 
-  // ---- session state ----
+  const [checking, setChecking] = useState(true);
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [scanning, setScanning] = useState(false);
   const [starting, setStarting] = useState(false);
   const [result, setResult] = useState<ScanResult | null>(null);
   const [online, setOnline] = useState(true);
   const [sessionAccepted, setSessionAccepted] = useState(0);
+  const [cameraError, setCameraError] = useState('');
 
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const busyRef = useRef(false);
   const lastTokenRef = useRef<{ token: string; at: number }>({ token: '', at: 0 });
 
   useEffect(() => {
-    fetch('/api/usher/events').then((r) => r.json()).then((b) => setEvents(b.events ?? [])).catch(() => undefined);
     const on = () => setOnline(true);
     const off = () => setOnline(false);
     window.addEventListener('online', on);
@@ -75,15 +69,31 @@ export default function ScannerPage() {
     };
   }, []);
 
+  // Initial gate: unauthenticated or disabled usher → usher login.
+  useEffect(() => {
+    fetch('/api/usher/session')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b) => {
+        if (b?.session) {
+          setSession(b.session);
+        } else {
+          router.replace('/usher/login');
+        }
+      })
+      .catch(() => {
+        setChecking(false);
+      });
+  }, [router]);
+
   const refreshSession = useCallback(() => {
     fetch('/api/usher/session')
       .then((r) => (r.ok ? r.json() : null))
       .then((b) => {
         if (b?.session) setSession(b.session);
-        else if (b?.disabled) setSession(null);
+        else if (b?.disabled) router.replace('/usher/login');
       })
       .catch(() => undefined);
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     if (!session) return;
@@ -110,23 +120,6 @@ export default function ScannerPage() {
     };
   }, []);
 
-  async function signIn(e: React.FormEvent) {
-    e.preventDefault();
-    setSigninError('');
-    const res = await fetch('/api/usher/signin', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eventId, name, pin }),
-    });
-    const body = await res.json().catch(() => ({}));
-    if (res.ok) {
-      fetch('/api/usher/session').then((r) => r.json()).then((b) => setSession(b.session ?? null)).catch(() => undefined);
-      setPin('');
-    } else {
-      setSigninError(body.message ?? 'Sign-in failed.');
-    }
-  }
-
   async function signOut() {
     await fetch('/api/usher/signout', { method: 'POST' }).catch(() => undefined);
     if (scannerRef.current) {
@@ -134,11 +127,18 @@ export default function ScannerPage() {
     }
     setSession(null);
     setScanning(false);
+    router.replace('/usher/login');
   }
 
   async function submitToken(token: string, gateId?: string | null) {
     const now = Date.now();
     if (!shouldSubmitToken({ busy: busyRef.current, lastToken: lastTokenRef.current.token, lastAt: lastTokenRef.current.at }, token, now)) {
+      return;
+    }
+    // Connectivity pre-check (UX only — the server transaction remains the
+    // sole authority; offline requests are never fabricated as granted).
+    if (!navigator.onLine) {
+      setResult({ kind: 'error', message: 'No Internet — invitation NOT validated. Do not admit. Reconnect and scan again.' });
       return;
     }
     busyRef.current = true;
@@ -157,6 +157,7 @@ export default function ScannerPage() {
       if (res.status === 401) {
         setSession(null);
         setScanning(false);
+        router.replace('/usher/login');
         return;
       }
       const body = await res.json();
@@ -186,6 +187,7 @@ export default function ScannerPage() {
 
   async function startScanner() {
     setStarting(true);
+    setCameraError('');
     try {
       const { Html5Qrcode } = await import('html5-qrcode');
       const scanner = new Html5Qrcode('qr-reader', { verbose: false });
@@ -199,7 +201,9 @@ export default function ScannerPage() {
       setScanning(true);
       setResult(null);
     } catch {
-      setSigninError('Could not start the camera. Allow camera permission and use Chrome/Safari on the phone.');
+      setCameraError(
+        'Could not start the camera. Tap the ⓘ icon next to the address bar (or Settings → Site permissions), allow Camera for this site, then tap Start Scanner again.'
+      );
     } finally {
       setStarting(false);
     }
@@ -215,34 +219,11 @@ export default function ScannerPage() {
     setScanning(false);
   }
 
-  // ---------------- sign-in screen ----------------
+  // ---------------- gate: session required ----------------
   if (!session) {
     return (
-      <main className="flex min-h-screen items-center justify-center px-4">
-        <form onSubmit={signIn} className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-lg">
-          <h1 className="mb-1 text-2xl font-semibold">Gate Scanner</h1>
-          <p className="mb-6 text-sm text-stone-500">Usher sign-in with your name and PIN</p>
-
-          <label className="block text-sm font-medium text-stone-700">Event</label>
-          <select value={eventId} onChange={(e) => setEventId(e.target.value)} className="mt-1 mb-4 w-full rounded-lg border border-stone-300 px-3 py-2.5" required>
-            <option value="">Choose event…</option>
-            {events.map((ev) => (
-              <option key={ev.id} value={ev.id}>{ev.name}</option>
-            ))}
-          </select>
-
-          <label className="block text-sm font-medium text-stone-700">Your name</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} className="mt-1 mb-4 w-full rounded-lg border border-stone-300 px-3 py-2.5" required />
-
-          <label className="block text-sm font-medium text-stone-700">PIN</label>
-          <input type="password" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value)} className="mt-1 mb-4 w-full rounded-lg border border-stone-300 px-3 py-2.5 text-2xl tracking-widest" required />
-
-          {signinError && <p className="mb-4 text-sm text-red-600">{signinError}</p>}
-
-          <button disabled={!eventId} className="w-full rounded-lg bg-stone-900 py-3 font-semibold text-white disabled:opacity-40">
-            Sign in
-          </button>
-        </form>
+      <main className="flex min-h-screen items-center justify-center">
+        <p className="text-stone-500">{checking ? 'Loading…' : 'Redirecting to usher sign-in…'}</p>
       </main>
     );
   }
@@ -265,9 +246,9 @@ export default function ScannerPage() {
           </button>
         </div>
 
-        <div className="mt-3 flex gap-2 text-xs">
+        <div className="mt-3 flex flex-wrap gap-2 text-xs">
           <span className={`rounded px-2 py-1 ${online ? 'bg-stone-700' : 'bg-red-600'}`}>
-            {online ? 'Online' : 'OFFLINE — cannot validate'}
+            {online ? 'Online' : 'No Internet'}
           </span>
           <span className={`rounded px-2 py-1 ${session.scanningEnabled ? 'bg-emerald-600' : 'bg-red-600'}`}>
             {session.scanningEnabled ? 'Scanning ACTIVE' : 'EVENT NOT OPEN'}
@@ -281,6 +262,10 @@ export default function ScannerPage() {
           </div>
         )}
 
+        {cameraError && (
+          <div className="mt-4 rounded-lg bg-amber-600 p-4 text-sm font-medium">{cameraError}</div>
+        )}
+
         {!scanning ? (
           <div className="mt-8 text-center">
             <button
@@ -291,7 +276,7 @@ export default function ScannerPage() {
               {starting ? 'Starting camera…' : '▶ Start Scanner'}
             </button>
             <div className="mt-6 text-left">
-              <label className="text-sm text-stone-400">Manual entry (camera not working)</label>
+              <label htmlFor="manual-entry" className="text-sm text-stone-400">Manual entry (camera not working)</label>
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -302,6 +287,7 @@ export default function ScannerPage() {
               >
                 <input
                   name="manual"
+                  id="manual-entry"
                   placeholder="IS26.xxxx…"
                   className="mt-1 w-full rounded-lg border border-stone-600 bg-stone-800 px-3 py-2 text-white"
                 />

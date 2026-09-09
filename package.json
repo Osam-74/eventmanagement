@@ -16,9 +16,12 @@
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:emulator": "firebase emulators:exec --project demo-eventaccess --only firestore \"vitest run\"",
-    "bench:generation": "RUN_BENCH=1 vitest run tests/perf/generation.bench.test.ts"
+    "bench:generation": "RUN_BENCH=1 vitest run tests/perf/generation.bench.test.ts",
+    "test:pwa": "vitest run --config vitest.pwa.config.ts",
+    "test:pwa:emulator": "firebase emulators:exec --project demo-eventaccess --only firestore \"npm run test:pwa\""
   },
   "dependencies": {
+    "@serwist/next": "^9.5.12",
     "archiver": "^7.0.1",
     "firebase": "^11.1.0",
     "firebase-admin": "^13.0.0",
@@ -40,7 +43,9 @@
     "autoprefixer": "^10.4.20",
     "firebase-tools": "^15.29.0",
     "jsqr": "^1.4.0",
+    "playwright": "^1.63.0",
     "postcss": "^8.4.49",
+    "serwist": "^9.5.12",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.2",
     "vitest": "^4.1.11"

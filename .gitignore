@@ -8,3 +8,9 @@ out/
 .DS_Store
 firebase-service-account*.json
 .vscode/
+
+# Serwist (generated service worker)
+public/sw*
+public/swe-worker*
+firestore-debug.log
+firebase-debug.log

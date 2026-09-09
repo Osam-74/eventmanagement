@@ -67,9 +67,9 @@ event day. Reusable for multiple events; first event: the I & S wedding
 ## Testing
 
 ```bash
-npm test                # full suite (starts the Firestore emulator; needs JDK 21+)
-npx vitest run tests/unit   # fast logic tests, no emulator
-npm run bench:generation    # opt-in card-render benchmark (RUN_BENCH=1)
+npm run test:emulator    # full suite — starts the Firestore emulator (needs JDK 21+)
+npm test                 # unit tests only (no emulator required)
+npm run bench:generation # opt-in card-render benchmark (RUN_BENCH=1)
 ```
 
 98 tests: unit (credentials, serials, geometry, sessions, permissions),

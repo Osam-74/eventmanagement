@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { signOut } from 'firebase/auth';
 import { getFirebaseAuth } from '@/lib/firebase/client';
 import { useAdmin } from '@/lib/client/useAdmin';
+import { signOutAdmin } from '@/lib/client/signOut';
 import { adminJson } from '@/lib/client/api';
 
 type EventItem = { id: string; name: string; slug: string };
@@ -54,6 +55,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       .catch(() => undefined);
   }, [profile, pathname]);
 
+  if (loading || !profile) {
+    // Gate: nothing authenticated renders until the server session confirms.
+    return (
+      <main className="flex min-h-screen items-center justify-center text-sm text-stone-500">
+        Checking your session…
+      </main>
+    );
+  }
+
   return (
     <div className="min-h-screen">
       <header className="border-b border-stone-200 bg-white">
@@ -81,7 +91,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <div className="ml-auto flex items-center gap-3 text-sm text-stone-500">
             <span>{profile?.displayName || profile?.email}</span>
             <button
-              onClick={() => signOut(getFirebaseAuth())}
+              onClick={() => signOutAdmin(() => router.replace('/'))}
               className="rounded-lg border border-stone-300 px-3 py-1.5 hover:bg-stone-50"
             >
               Sign out

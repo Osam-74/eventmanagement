@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth, db } from '@/lib/firebase/admin';
+import { ADMIN_SESSION_COOKIE, verifyAdminSessionToken } from '@/lib/auth/adminSession';
 import { ALL_PERMISSIONS, type Permission } from '@/lib/types';
 
 export type AdminContext = {
@@ -27,31 +28,43 @@ export function serverError(message = 'Unexpected error') {
 }
 
 /**
- * Verifies the Firebase ID token in the Authorization header and loads the
- * admin profile from Firestore. Returns null when the caller is not an
- * active administrator.
+ * Resolves the calling admin, by EITHER:
+ *  1. the server-established admin_session HttpOnly cookie (production UI
+ *     sessions — created only by /api/auth/session after full validation),
+ *     or
+ *  2. a Firebase ID token in the Authorization header (kept for tooling and
+ *     tests; equivalent authority).
+ *
+ * Both paths then load the users/{uid} record from Firestore, so every
+ * request re-confirms the admin is active and has the permission —
+ * sessions are pointers, not proof.
  */
 export async function getAdminContext(req: NextRequest): Promise<AdminContext | null> {
+  let uid: string | null = null;
+
   const header = req.headers.get('authorization') ?? '';
   const match = header.match(/^Bearer (.+)$/);
-  if (!match) return null;
-
-  let decoded;
-  try {
-    decoded = await auth().verifyIdToken(match[1], true);
-  } catch {
-    return null;
+  if (match) {
+    try {
+      uid = (await auth().verifyIdToken(match[1], true)).uid;
+    } catch {
+      return null;
+    }
+  } else {
+    const session = verifyAdminSessionToken(req.cookies.get(ADMIN_SESSION_COOKIE)?.value);
+    if (!session) return null;
+    uid = session.uid;
   }
 
-  const snap = await db().collection('users').doc(decoded.uid).get();
+  const snap = await db().collection('users').doc(uid).get();
   if (!snap.exists) return null;
   const data = snap.data() as Record<string, unknown>;
-  if (data.active === false) return null;
+  if (!snap.exists || data.active === false) return null;
   if (data.accountType !== 'ROOT_ADMIN' && data.accountType !== 'ADMIN') return null;
 
   return {
-    uid: decoded.uid,
-    email: String(data.email ?? decoded.email ?? ''),
+    uid,
+    email: String(data.email ?? ''),
     displayName: String(data.displayName ?? ''),
     accountType: data.accountType,
     permissions: (data.permissions as Record<string, boolean>) ?? {},

@@ -13,6 +13,7 @@ type Usher = {
   lastSeenAt: string | null;
   lastScanAt: string | null;
   lockedUntil: string | null;
+  needsPinMigration?: boolean;
 };
 
 const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : '—');
@@ -52,10 +53,15 @@ export default function UshersPage() {
   }
 
   async function patch(id: string, body: Record<string, unknown>) {
-    const r = await adminJson<{ ok: boolean; pin?: string | null }>(`/api/admin/ushers/${id}`, {
+    setMsg('');
+    const r = await adminJson<{ ok: boolean; pin?: string | null; message?: string }>(`/api/admin/ushers/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
     }).catch(() => null);
+    if (!r?.ok) {
+      setMsg(r?.message ?? 'Update failed.');
+      return;
+    }
     if (r?.pin) setCreatedPin(r.pin);
     load();
   }
@@ -68,12 +74,13 @@ export default function UshersPage() {
         <form onSubmit={create} className="rounded-xl bg-white p-4 shadow-sm">
           <h2 className="mb-1 font-semibold">Create usher (gate official)</h2>
           <p className="mb-3 text-sm text-stone-500">
-            Name + PIN only — no Firebase account. Leave PIN empty for a secure auto-generated 6-digit PIN.
+            The PIN alone identifies the usher at the gate — no name or event selection there.
+            Leave PIN empty for a secure auto-generated unique 6-digit PIN.
             The PIN is shown to you exactly once; hand it over privately.
           </p>
           <div className="grid gap-3 sm:grid-cols-4">
             <input placeholder="Usher name" value={name} onChange={(e) => setName(e.target.value)} className="rounded-lg border border-stone-300 px-3 py-2" required />
-            <input placeholder="PIN (optional, 6–10 digits)" value={pin} onChange={(e) => setPin(e.target.value)} className="rounded-lg border border-stone-300 px-3 py-2" />
+            <input placeholder="PIN (optional, 6 digits)" value={pin} onChange={(e) => setPin(e.target.value)} className="rounded-lg border border-stone-300 px-3 py-2" />
             <input placeholder="Gate label (optional)" value={gateId} onChange={(e) => setGateId(e.target.value)} className="rounded-lg border border-stone-300 px-3 py-2" />
             <button className="rounded-lg bg-stone-900 px-4 py-2 text-white">Create</button>
           </div>
@@ -104,6 +111,7 @@ export default function UshersPage() {
                 <td className="py-2">
                   {u.name}
                   {!u.active && <span className="ml-2 rounded bg-red-100 px-2 py-0.5 text-xs text-red-700">disabled</span>}
+                  {u.needsPinMigration && <span className="ml-2 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-700">PIN reset required</span>}
                   {u.lockedUntil && new Date(u.lockedUntil).getTime() > Date.now() && (
                     <span className="ml-2 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-700">locked until {fmt(u.lockedUntil)}</span>
                   )}

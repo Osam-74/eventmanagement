@@ -3,7 +3,7 @@ import type { Firestore } from 'firebase-admin/firestore';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { generateQrToken } from '@/lib/qr/token';
 import { digestToken } from '@/lib/qr/digest';
-import { pinVerifier } from '@/lib/auth/pin';
+import { pinLookupIndex, pinVerifier } from '@/lib/auth/pin';
 
 export const EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST ?? '127.0.0.1:8080';
 
@@ -89,11 +89,17 @@ export async function seedUsher(
   const name = opts.name ?? 'Test Usher';
   const pin = opts.pin ?? '123456';
   const ref = db.collection('ushers').doc();
+  // PIN-only identity: every seeded usher gets the registry entry so
+  // sign-in resolves by PIN alone.
+  if (opts.active ?? true) {
+    await db.collection('pinRegistry').doc(pinLookupIndex(pin)).set({ usherId: ref.id, createdAt: FieldValue.serverTimestamp() });
+  }
   await ref.set({
     eventId: opts.eventId ?? EV1,
     name,
     normalizedName: name.toLowerCase(),
     pinVerifier: pinVerifier(ref.id, pin),
+    pinIndex: pinLookupIndex(pin),
     active: opts.active ?? true,
     gateId: null,
     failedAttempts: opts.failedAttempts ?? 0,

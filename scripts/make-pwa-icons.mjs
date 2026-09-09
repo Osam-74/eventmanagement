@@ -1,5 +1,5 @@
 /**
- * Generates PWA icons for "I & S Access" from an SVG monogram:
+ * Generates PWA icons for "Event Access" from an SVG monogram:
  *  - public/icons/icon-192x192.png        (any purpose)
  *  - public/icons/icon-512x512.png        (any purpose)
  *  - public/icons/maskable-192x192.png    (maskable, safe-zone padded)
@@ -9,8 +9,8 @@
  */
 import sharp from 'sharp';
 
-const BG = '#1c1917';   // stone-900 — matches the scanner header
-const FG = '#b08d57';   // muted gold — invitation frame tone
+const BG = '#1c1917';   // stone-900 — matches the app header
+const FG = '#e7e5e4';   // stone-200 — clean, neutral product identity
 
 const monogram = (fullBleed, size) => {
   // For maskable icons the entire canvas is background (safe zone = center 80%).
@@ -19,9 +19,9 @@ const monogram = (fullBleed, size) => {
     `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">
       <rect width="${size}" height="${size}" rx="${fullBleed ? 0 : size * 0.14}" fill="${BG}"/>
       <rect width="${size}" height="${size}" fill="${BG}" opacity="0"/>
-      <text x="50%" y="55%" font-family="Georgia, 'Times New Roman', serif"
-            font-size="${font}" font-style="italic" font-weight="700"
-            fill="${FG}" text-anchor="middle" dominant-baseline="middle">I&amp;S</text>
+      <text x="50%" y="55%" font-family="Helvetica, Arial, sans-serif"
+            font-size="${font}" font-style="normal" font-weight="700"
+            letter-spacing="${size * 0.02}" fill="${FG}" text-anchor="middle" dominant-baseline="middle">EA</text>
     </svg>`
   );
 };

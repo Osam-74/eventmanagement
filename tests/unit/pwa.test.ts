@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { runtimeCacheEntries } from '@/lib/pwa/swConfig';
+import { runtimeCacheEntries, APP_CACHE_VERSION } from '@/lib/pwa/swConfig';
 import { CacheFirst, NetworkFirst, NetworkOnly, StaleWhileRevalidate } from 'serwist';
 
 const ROOT = path.resolve(__dirname, '../..');
@@ -11,9 +11,9 @@ describe('PWA web app manifest', () => {
     readFileSync(path.join(ROOT, 'public/manifest.webmanifest'), 'utf-8')
   ) as Record<string, unknown>;
 
-  it('has the approved app identity', () => {
-    expect(manifest.name).toBe('I & S Access');
-    expect(manifest.short_name).toBe('I&S Access');
+  it('has the approved app identity (product renamed to Event Access)', () => {
+    expect(manifest.name).toBe('Event Access');
+    expect(manifest.short_name).toBe('Event Access');
   });
 
   it('is installable: standalone display and a start URL', () => {
@@ -39,6 +39,20 @@ describe('PWA web app manifest', () => {
   });
 });
 
+describe('cache versioning', () => {
+  it('all cacheable strategies use per-release versioned cache names', () => {
+    for (const entry of runtimeCacheEntries) {
+      if (!(entry.handler instanceof NetworkOnly)) {
+        expect((entry.handler as { cacheName?: string }).cacheName?.startsWith(APP_CACHE_VERSION + '/')).toBe(true);
+      }
+    }
+  });
+
+  it('the /api NetworkOnly rule stays first and matches every sensitive path', () => {
+    expect(runtimeCacheEntries[0].handler).toBeInstanceOf(NetworkOnly);
+  });
+});
+
 describe('service worker cache policy', () => {
   // Every security-sensitive API surface in the application.
   const SENSITIVE_PATHS = [
@@ -47,7 +61,9 @@ describe('service worker cache policy', () => {
     { method: 'POST', path: '/api/usher/signin' },
     { method: 'POST', path: '/api/usher/signout' },
     { method: 'POST', path: '/api/usher/heartbeat' },
-    { method: 'GET', path: '/api/usher/events' },
+    { method: 'POST', path: '/api/auth/session' },
+    { method: 'GET', path: '/api/auth/session' },
+    { method: 'DELETE', path: '/api/auth/session' },
     { method: 'GET', path: '/api/admin/dashboard' },
     { method: 'GET', path: '/api/admin/invitations' },
     { method: 'GET', path: '/api/admin/invitations/abc123' },

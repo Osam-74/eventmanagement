@@ -47,21 +47,24 @@ jobs:
           QR_TOKEN_HMAC_KEY: 'ci-test-secret-key-for-hmac-32bytes!!'
           USHER_PIN_PEPPER: 'ci-test-pin-pepper'
           USHER_SESSION_SECRET: 'ci-test-session-secret'
-      # Integration + security-rules suites against the Firestore emulator
-      - name: Run integration & rules tests (Firestore emulator)
-        run: npx firebase emulators:exec --project demo-eventaccess --only firestore "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npx vitest run tests/integration tests/rules"
+          ADMIN_SESSION_SECRET: 'ci-test-admin-session-secret'
+      # Integration + security-rules suites against the Firestore + Auth emulators
+      - name: Run integration & rules tests (Firestore + Auth emulators)
+        run: npx firebase emulators:exec --project demo-eventaccess --only firestore,auth "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 npx vitest run tests/integration tests/rules"
         env:
           QR_TOKEN_HMAC_KEY: 'ci-test-secret-key-for-hmac-32bytes!!'
           USHER_PIN_PEPPER: 'ci-test-pin-pepper'
           USHER_SESSION_SECRET: 'ci-test-session-secret'
+          ADMIN_SESSION_SECRET: 'ci-test-admin-session-secret'
       # PWA e2e: production build served by `next start` against the
       # emulator, driven by headless Chromium (routing, auth gates,
       # offline behaviour, SW cache policy).
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
-      - name: Run PWA e2e tests (Firestore emulator)
-        run: npx firebase emulators:exec --project demo-eventaccess --only firestore "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm run test:pwa"
+      - name: Run PWA e2e tests (Firestore + Auth emulators)
+        run: npx firebase emulators:exec --project demo-eventaccess --only firestore,auth "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 npm run test:pwa"
         env:
           QR_TOKEN_HMAC_KEY: 'ci-test-secret-key-for-hmac-32bytes!!'
           USHER_PIN_PEPPER: 'ci-test-pin-pepper'
           USHER_SESSION_SECRET: 'ci-test-session-secret'
+          ADMIN_SESSION_SECRET: 'ci-test-admin-session-secret'

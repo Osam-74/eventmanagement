@@ -1,7 +1,7 @@
 {
-  "name": "I & S Access",
-  "short_name": "I&S Access",
-  "description": "Wedding invitation QR access control for the I & S wedding",
+  "name": "Event Access",
+  "short_name": "Event Access",
+  "description": "Invitation QR access control for events",
   "id": "/",
   "start_url": "/",
   "scope": "/",
@@ -10,9 +10,27 @@
   "background_color": "#1c1917",
   "theme_color": "#1c1917",
   "icons": [
-    { "src": "/icons/icon-192x192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icons/icon-512x512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "/icons/maskable-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
-    { "src": "/icons/maskable-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/maskable-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }

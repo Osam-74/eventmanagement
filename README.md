@@ -34,10 +34,12 @@ event day. Reusable for multiple events; first event: the I & S wedding
   permissions (`canManageAdmins`, `canManageEvents`, `canGenerateInvites`,
   `canManageInvites`, `canManageUshers`, `canViewAnalytics`) enforced
   server-side with anti-escalation.
-- **Usher PIN access** — ushers sign in with name + 6-digit PIN (hashed
-  with a server-only pepper, never plaintext; rate-limited with temporary
-  lockout). Short-lived signed HttpOnly session, event-scoped, revocable
-  instantly by disabling the usher.
+- **Usher PIN-only access** — the usher enters ONLY their 6-digit PIN on
+  a full-screen PIN pad. The PIN alone identifies the usher server-side
+  and resolves their admin-assigned event; the browser never submits a
+  name or event. See "PIN-only identification" below for the exact
+  implementation. Rate-limited with temporary lockout; short-lived signed
+  HttpOnly session, revocable instantly by disabling the usher.
 - **Realtime dashboard** — scanning status, totals (generated / unused /
   admitted / revoked / rescans allowed), per-usher activity, recent scan
   feed, CSV export.
@@ -51,7 +53,51 @@ event day. Reusable for multiple events; first event: the I & S wedding
 | Events / Templates / Generate / Batches | `/admin/events`, `/admin/templates`, `/admin/generate`, `/admin/batches` |
 | **Invitations (search / trace / allow-rescan / revoke)** | `/admin/invitations` |
 | Ushers / Admins / Scan logs | `/admin/ushers`, `/admin/admins`, `/admin/logs` |
+| Usher PIN pad | `/usher/login` |
 | Gate scanner (phone) | `/scan` |
+
+## PIN-only identification (exact implementation)
+
+The PIN alone identifies the usher. Two keyed HMAC-SHA256 derivations share
+one server-only secret (`USHER_PIN_PEPPER`, an env var never baked into
+client code):
+
+1. **`pinLookupIndex(pin)` = HMAC(pepper, "pin-index:" + pin)** — the
+   deterministic, non-reversible index used for lookup. It is the DOCUMENT
+   ID in the `pinRegistry` collection: `{ usherId }`. Because Firestore
+   document-ID creation is atomic, two ACTIVE ushers can never hold the
+   same PIN — concurrent admin creates are serialized by the transaction
+   (worst case, a retry). Plaintext PINs are never stored anywhere.
+2. **`pinVerifier(usherId, pin)` = HMAC(pepper, usherId + ":" + pin)** —
+   the per-account confirmation key stored on the usher document and
+   compared timing-safely (constant-time `safeEqual`) AFTER the lookup.
+
+Sign-in flow: index lookup in `pinRegistry` → resolve `usherId` → load the
+usher record → check active state → check lockout → confirm with
+`pinVerifier` → clear failure counters → issue the signed usher session
+carrying `{ usherId, eventId (from the record), exp }`. Unassigned PINs
+get a uniform "Invalid PIN." and a small fixed delay to slow blind
+guessing. Active usher PINs are globally unique across the deployment.
+Disabling an usher RELEASES the PIN index; re-enabling re-claims it, and
+if another usher took the PIN in the meantime the admin must reset it.
+PIN resets run the same atomic uniqueness check. Ushers created before
+v1.3.0 have no index yet and are flagged `needsPinMigration` — an admin
+PIN reset migrates them.
+
+## Admin session (why login is deterministic)
+
+The production v1.2.0 flow had no server-established admin session: /login
+redirected to /admin on Firebase client state alone and each page
+re-validated with a Bearer ID token, producing two auth states that could
+disagree (observed as login/logout ping-pong, with aborted fetches
+surfacing as NS_BINDING_ABORTED). v1.3.0 makes the server session the
+single authority: `POST /api/auth/session` (verify ID token → verify
+admin record → set HttpOnly signed `admin_session` cookie) is the only
+path to /admin; every admin API accepts the cookie and re-checks the
+`users/{uid}` record per request, so disabling an admin or changing
+permissions applies immediately. Logout deletes the cookie server-side
+first, then the Firebase client state. The client Firebase session alone
+never renders authenticated UI.
 
 ## Security model (summary)
 

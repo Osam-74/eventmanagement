@@ -1,5 +1,5 @@
 /**
- * Service-worker runtime caching configuration for "I & S Access".
+ * Service-worker runtime caching configuration for "Event Access".
  *
  * SECURITY RULES (enforced by tests/unit/pwa-sw-config.test.ts):
  *  1. Every same-origin request under /api/ MUST be handled NetworkOnly.
@@ -21,6 +21,14 @@ import type { RuntimeCaching } from 'serwist';
 export const SENSITIVE_API_PREFIX = '/api/';
 
 /**
+ * Cache names are versioned per release: when a newly deployed service
+ * worker activates it deletes every cache from earlier versions (see
+ * sw.ts), so an installed older PWA can never keep serving an obsolete
+ * application shell indefinitely.
+ */
+export const APP_CACHE_VERSION = 'event-access/v1.3.0';
+
+/**
  * All runtime caching rules, in matching order. The /api NetworkOnly rule is
  * first so it always wins for API requests; everything else is static-asset
  * only. Navigations (HTML/RSC) are handled by the `document` entries below —
@@ -38,7 +46,7 @@ export const runtimeCacheEntries: RuntimeCaching[] = [
     // Next.js build output chunks — immutable, safe to cache-first.
     matcher: /\/_next\/static\/.+$/i,
     handler: new CacheFirst({
-      cacheName: 'next-static-assets',
+      cacheName: `${APP_CACHE_VERSION}/static`,
       plugins: [new ExpirationPlugin({ maxEntries: 96, maxAgeSeconds: 30 * 24 * 60 * 60, maxAgeFrom: 'last-used' })],
     }),
   },
@@ -46,7 +54,7 @@ export const runtimeCacheEntries: RuntimeCaching[] = [
     // Static image assets (icons, artwork previews).
     matcher: /\.(?:jpg|jpeg|gif|png|svg|ico|webp)$/i,
     handler: new StaleWhileRevalidate({
-      cacheName: 'static-image-assets',
+      cacheName: `${APP_CACHE_VERSION}/images`,
       plugins: [new ExpirationPlugin({ maxEntries: 64, maxAgeSeconds: 720 * 60 * 60, maxAgeFrom: 'last-used' })],
     }),
   },
@@ -54,7 +62,7 @@ export const runtimeCacheEntries: RuntimeCaching[] = [
     // Stylesheets.
     matcher: /\.(?:css|less)$/i,
     handler: new StaleWhileRevalidate({
-      cacheName: 'static-style-assets',
+      cacheName: `${APP_CACHE_VERSION}/styles`,
       plugins: [new ExpirationPlugin({ maxEntries: 32, maxAgeSeconds: 1440 * 60, maxAgeFrom: 'last-used' })],
     }),
   },
@@ -65,7 +73,7 @@ export const runtimeCacheEntries: RuntimeCaching[] = [
       sameOrigin &&
       !pathname.startsWith(SENSITIVE_API_PREFIX),
     handler: new StaleWhileRevalidate({
-      cacheName: 'html-shell',
+      cacheName: `${APP_CACHE_VERSION}/html`,
       plugins: [new ExpirationPlugin({ maxEntries: 16, maxAgeSeconds: 24 * 60 * 60, maxAgeFrom: 'last-used' })],
     }),
   },

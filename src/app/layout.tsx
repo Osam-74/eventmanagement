@@ -2,14 +2,14 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'I & S Access',
-  description: 'Wedding invitation QR access control for the I & S wedding',
-  applicationName: 'I & S Access',
+  title: 'Event Access',
+  description: 'Invitation QR access control for events',
+  applicationName: 'Event Access',
   manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'I&S Access',
+    title: 'Event Access',
   },
   icons: {
     icon: [

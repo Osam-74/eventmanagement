@@ -1,7 +1,7 @@
 'use client';
 
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
-import { getAuth, type Auth } from 'firebase/auth';
+import { connectAuthEmulator, getAuth, type Auth } from 'firebase/auth';
 
 /**
  * Firebase web (client) SDK configuration. These values identify the web app to
@@ -41,6 +41,17 @@ export function getFirebaseApp(): FirebaseApp {
   return getApps().length ? getApp() : initializeApp(firebaseConfig);
 }
 
+let emulatorWired = false;
+
 export function getFirebaseAuth(): Auth {
-  return getAuth(getFirebaseApp());
+  const auth = getAuth(getFirebaseApp());
+  // TEST BUILDS ONLY: point the client SDK at the Firebase Auth emulator.
+  // The env var is set at BUILD time by the e2e suite; production builds
+  // never contain it, so this branch is compiled out.
+  const emu = process.env.NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST;
+  if (emu && !emulatorWired) {
+    emulatorWired = true;
+    connectAuthEmulator(auth, emu, { disableWarnings: true });
+  }
+  return auth;
 }

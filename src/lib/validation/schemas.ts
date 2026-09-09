@@ -43,7 +43,7 @@ export const createUsherSchema = z.object({
   name: z.string().min(2).max(80),
   pin: z
     .string()
-    .regex(/^\d{6,10}$/)
+    .regex(/^\d{6}$/, 'PIN must be exactly 6 digits')
     .optional(),
   gateId: z.string().max(40).optional().nullable(),
 });
@@ -53,16 +53,16 @@ export const updateUsherSchema = z.object({
   resetPin: z.boolean().optional(),
   newPin: z
     .string()
-    .regex(/^\d{6,10}$/)
+    .regex(/^\d{6}$/, 'PIN must be exactly 6 digits')
     .optional(),
   gateId: z.string().max(40).optional().nullable(),
   name: z.string().min(2).max(80).optional(),
 });
 
+// PIN-only usher sign-in: the PIN alone identifies the usher —
+// name and event are resolved server-side and are never submitted.
 export const usherSigninSchema = z.object({
-  eventId: z.string().min(4),
-  name: z.string().min(1).max(80),
-  pin: z.string().regex(/^\d{6,10}$/),
+  pin: z.string().regex(/^\d{6}$/),
 });
 
 // Serverless time/memory safety: share-profile renders are fast, but each

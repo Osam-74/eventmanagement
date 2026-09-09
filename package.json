@@ -1,0 +1,40 @@
+{
+  "name": "eventmanagement",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Wedding invitation QR access-control system (multi-event)",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "bootstrap:root-admin": "node scripts/bootstrap-root-admin.mjs",
+    "make:sample-template": "node scripts/make-sample-template.mjs"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "firebase": "^11.1.0",
+    "firebase-admin": "^13.0.0",
+    "html5-qrcode": "^2.3.8",
+    "next": "^15.1.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "sharp": "^0.33.5",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/archiver": "^6.0.3",
+    "@types/node": "^22.10.2",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.2"
+  }
+}

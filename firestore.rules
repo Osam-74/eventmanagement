@@ -1,0 +1,15 @@
+rules_version = '2';
+
+// All client access is DENIED. Every read/write happens through trusted
+// server code (Next.js API routes using the Firebase Admin SDK), which is
+// not subject to these rules. This guarantees the browser can never:
+//   - mark an invitation used
+//   - toggle scanning
+//   - change permissions or usher PINs
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

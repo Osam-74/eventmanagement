@@ -1,0 +1,78 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "scanLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "eventId", "order": "ASCENDING" },
+        { "fieldPath": "scannedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "scanLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "eventId", "order": "ASCENDING" },
+        { "fieldPath": "scannedAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "scanLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tokenDigest", "order": "ASCENDING" },
+        { "fieldPath": "scannedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "scanLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "eventId", "order": "ASCENDING" },
+        { "fieldPath": "result", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "invitations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "eventId", "order": "ASCENDING" },
+        { "fieldPath": "serialNumber", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "invitations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "eventId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "serialNumber", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "invitations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "batchId", "order": "ASCENDING" },
+        { "fieldPath": "serialNumber", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "batches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "eventId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ushers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "eventId", "order": "ASCENDING" },
+        { "fieldPath": "normalizedName", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

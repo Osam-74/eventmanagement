@@ -27,7 +27,25 @@ export async function adminJson<T>(path: string, init?: RequestInit): Promise<T>
   const res = await adminFetch(path, init);
   const body = await res.json().catch(() => ({}));
   if (!res.ok && res.status === 401) {
-    window.location.href = '/login';
+    // A 401 mid-sign-out comes from widget/poll requests that were still
+    // in flight when the session cookie was revoked. Redirecting would
+    // bounce the user off the post-logout landing page — swallow it; the
+    // sign-out flow is already heading to '/' and a fresh login clears
+    // the intent (see useAdmin.fetchAdminSession).
+    if (!signOutIntent) window.location.href = '/login';
   }
   return body as T;
+}
+
+/**
+ * Sign-out intent: set the moment the user initiates sign-out (before the
+ * cookie is revoked), cleared when a fresh authorized session is fetched.
+ * While active, 401s do NOT trigger the automatic /login redirect.
+ */
+let signOutIntent = false;
+export function beginSignOutIntent(): void {
+  signOutIntent = true;
+}
+export function endSignOutIntent(): void {
+  signOutIntent = false;
 }

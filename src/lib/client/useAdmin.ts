@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext } from 'react';
-import { adminJson } from '@/lib/client/api';
+import { adminJson, endSignOutIntent } from '@/lib/client/api';
 
 export type AdminProfile = {
   uid: string;
@@ -50,7 +50,12 @@ export function fetchAdminSession(): Promise<AdminProfile> {
       // the /login flow and the layout's gate redirect run in the SAME
       // client document — a cached "unauthorized" would make the NEXT
       // login bounce straight back to /login until a full page reload.
-      if (r.admin) sessionCache = r.admin;
+      if (r.admin) {
+        sessionCache = r.admin;
+        // A fresh authorized session is live: re-arm the automatic
+        // 401 -> /login redirect suppressed during sign-out.
+        endSignOutIntent();
+      }
       return r.admin ?? null;
     })
     .finally(() => {

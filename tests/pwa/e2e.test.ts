@@ -454,15 +454,23 @@ describe('PWA: manifest, service worker, cache policy', () => {
 });
 
 describe('camera denial', () => {
-  it('shows a useful instruction instead of a broken scanner', async () => {
+  it.each([
+    ['NotAllowedError', 'Camera permission was denied'],
+    ['NotFoundError', 'No camera was found on this device'],
+  ])('shows the correct instruction for %s', async (errorName, message) => {
     const ctx = await browser.newContext({ permissions: [] });
     const p = await ctx.newPage();
+    // permissions: [] leaves the permission unset; it does NOT deny it.
+    // A headless host with no camera can return NotFoundError instead.
+    await p.addInitScript((name) => {
+      navigator.mediaDevices.getUserMedia = async () => { throw new DOMException('Test camera failure', name); };
+    }, errorName);
     await enterPin(p, USHER_PIN);
     await p.waitForURL(`${BASE}/scan`, { timeout: 15000 });
     await p.getByRole('button', { name: /Start Scanner/ }).click();
     // getUserMedia is denied → the catch path must show the permission
     // instruction (NOT a crash or a silent hang).
-    await expectVisible(p.getByText(/Could not start the camera|Camera permission was denied/i), 30000);
+    await expectVisible(p.getByText(message, { exact: false }), 30000);
     await ctx.close();
   });
 });
@@ -601,7 +609,7 @@ describe('QR decode — the camera actually READS a code and checks it in', () =
       // the invitation is consumed in the emulator transaction
       const snap = await inv.ref.get();
       expect(snap.data()?.status).toBe('used');
-      await expectVisible(p.getByText('ALREADY USED'), 15000);
+      await expectVisible(p.getByText('ALREADY USED ✗', { exact: true }), 15000);
       await p.getByRole('button', { name: 'Pause scanner' }).click();
       const stoppedCount = scanRequests;
       await p.waitForTimeout(3000);

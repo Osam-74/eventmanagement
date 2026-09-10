@@ -6,6 +6,8 @@ import { initializeApp as adminInitializeApp, deleteApp as adminDeleteApp } from
 import { getFirestore as adminGetFirestore } from 'firebase-admin/firestore';
 import QRCode from 'qrcode';
 import sharp from 'sharp';
+import { renderInvitationImage } from '@/lib/invitation/render';
+import { deriveTemplateGeometry } from '@/lib/invitation/geometry';
 
 /**
  * E2E PWA + routing/authentication suite against the real production build
@@ -95,14 +97,19 @@ const FFMPEG_OK = spawnSync('ffmpeg', ['-version']).status === 0;
  * --use-file-for-fake-video-capture only reads Y4M video, so: sharp composes
  * the still frame, then ffmpeg converts it to a 2s looping Y4M stream.
  */
-async function renderQrFeed(token: string, path: string) {
-  // 400px QR centered on a 1280x720 white canvas — comfortably inside the
-  // scanner's 70% center decode region, mirroring a card held properly.
-  const qr = await QRCode.toBuffer(token, { errorCorrectionLevel: 'Q', margin: 0, width: 400, color: { dark: '#000000ff', light: '#ffffffff' } });
-  const qrPng = await sharp(qr).png().toBuffer();
+async function renderQrFeed(token: string, path: string, generic = false) {
+  // Use the production JPEG renderer, including artwork and QR placement.
+  // The generic control deliberately uses a plain QR instead.
+  if (!FFMPEG_OK) throw new Error('Camera decode tests require ffmpeg; install it before running this suite.');
+  const templateBuffer = await sharp({ create: { width: 1070, height: 1470, channels: 3, background: '#16130b' } }).png().toBuffer();
+  const rendered = generic
+    ? await QRCode.toBuffer(token, { margin: 4, width: 400 })
+    : (await renderInvitationImage({ templateBuffer, geometry: deriveTemplateGeometry(1070, 1470), qrToken: token, serial: 'TEST00001', profile: 'share' })).buffer;
+  const qrPng = await sharp(rendered).resize({ height: generic ? 400 : 720 }).png().toBuffer();
+  const dimensions = await sharp(qrPng).metadata();
   const still = '/tmp/e2e-qr-feed.jpg';
   await sharp({ create: { width: 1280, height: 720, channels: 3, background: '#ffffff' } })
-    .composite([{ input: qrPng, left: 440, top: 160 }])
+    .composite([{ input: qrPng, left: Math.floor((1280 - dimensions.width!) / 2), top: Math.floor((720 - dimensions.height!) / 2) }])
     .jpeg()
     .toFile(still);
   const r = spawnSync(
@@ -447,15 +454,23 @@ describe('PWA: manifest, service worker, cache policy', () => {
 });
 
 describe('camera denial', () => {
-  it('shows a useful instruction instead of a broken scanner', async () => {
+  it.each([
+    ['NotAllowedError', 'Camera permission was denied'],
+    ['NotFoundError', 'No camera was found on this device'],
+  ])('shows the correct instruction for %s', async (errorName, message) => {
     const ctx = await browser.newContext({ permissions: [] });
     const p = await ctx.newPage();
+    // permissions: [] leaves the permission unset; it does NOT deny it.
+    // A headless host with no camera can return NotFoundError instead.
+    await p.addInitScript((name) => {
+      navigator.mediaDevices.getUserMedia = async () => { throw new DOMException('Test camera failure', name); };
+    }, errorName);
     await enterPin(p, USHER_PIN);
     await p.waitForURL(`${BASE}/scan`, { timeout: 15000 });
     await p.getByRole('button', { name: /Start Scanner/ }).click();
     // getUserMedia is denied → the catch path must show the permission
     // instruction (NOT a crash or a silent hang).
-    await expectVisible(p.getByText(/Could not start the camera|Camera permission was denied/i), 30000);
+    await expectVisible(p.getByText(message, { exact: false }), 30000);
     await ctx.close();
   });
 });
@@ -494,12 +509,69 @@ describe('camera start', () => {
 });
 
 describe('QR decode — the camera actually READS a code and checks it in', () => {
+  it('decodes generic QR, resets after API failure and invalid response, and cleans up on navigation', async () => {
+    const feedPath = '/tmp/e2e-generic-feed.y4m';
+    await renderQrFeed('generic-scanner-check', feedPath, true);
+    const cam = await chromium.launch({ args: [
+      '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream',
+      `--use-file-for-fake-video-capture=${feedPath}`,
+    ] });
+    try {
+      // Interception tests intentionally bypass SW; the existing PWA suite
+      // independently verifies the production NetworkOnly API policy.
+      const ctx = await cam.newContext({ serviceWorkers: 'block' });
+      const p = await ctx.newPage();
+      let calls = 0;
+      await p.route('**/api/scan', async (route) => {
+        calls++;
+        expect(route.request().postDataJSON().token).toBe('generic-scanner-check');
+        if (calls === 1) { await route.abort('failed'); return; }
+        await route.fulfill({ json: { code: 'INVALID', message: 'Invalid invitation' } });
+      });
+      await enterPin(p, USHER_PIN);
+      await p.waitForURL(`${BASE}/scan`);
+      await p.getByRole('button', { name: /Start Scanner/ }).click();
+      await expectVisible(p.getByText(/Network error — invitation NOT validated/), 30000);
+      expect(calls).toBe(1);
+      await p.waitForTimeout(1000);
+      expect(calls).toBe(1);
+      await expectVisible(p.getByText('Invalid invitation'), 15000);
+      expect(calls).toBe(2);
+      await expectVisible(p.getByText('Scanner ready — point the camera at the invitation QR.'), 10000);
+      await p.goto(`${BASE}/`);
+      const callsAfterCleanup = calls;
+      await p.waitForTimeout(6000);
+      expect(calls).toBe(callsAfterCleanup);
+      await ctx.close();
+    } finally { await cam.close(); }
+  });
+
+  it('surfaces worker initialization failure instead of claiming scanner readiness', async () => {
+    const cam = await chromium.launch({ args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
+    try {
+      const ctx = await cam.newContext({ serviceWorkers: 'block' });
+      const p = await ctx.newPage();
+      await p.addInitScript(() => {
+        window.Worker = class { constructor() { throw new Error('Injected worker initialization failure'); } } as unknown as typeof Worker;
+      });
+      let calls = 0;
+      p.on('request', (request) => { if (new URL(request.url()).pathname === '/api/scan') calls++; });
+      await enterPin(p, USHER_PIN);
+      await p.waitForURL(`${BASE}/scan`);
+      await p.getByRole('button', { name: /Start Scanner/ }).click();
+      await expectVisible(p.getByText(/QR decoder failed|QR decoder is not processing frames/), 20000);
+      expect(await p.locator('[data-decoder-ready="true"]').count()).toBe(0);
+      expect(calls).toBe(0);
+      await ctx.close();
+    } finally { await cam.close(); }
+  });
+
   // The ultimate scanner regression: a real QR image is fed through
   // Chromium's fake camera (--use-file-for-fake-device-capture) so the
   // whole chain runs: getUserMedia → qr-scanner decode → /api/scan
   // transaction → ACCESS GRANTED. Guards against the "camera shows but
   // nothing ever scans" failure mode (native BarcodeDetector path).
-  it.skipIf(!FFMPEG_OK)('points the camera at a card and gets ACCESS GRANTED automatically', async () => {
+  it('points the camera at a production-rendered card and gets ACCESS GRANTED automatically', async () => {
     const inv = await seedE2EInvitation('E2E-00001');
     const feedPath = '/tmp/e2e-qr-feed.y4m';
     await renderQrFeed(inv.token, feedPath);
@@ -517,6 +589,8 @@ describe('QR decode — the camera actually READS a code and checks it in', () =
     try {
       const ctx = await cam.newContext();
       const p = await ctx.newPage();
+      let scanRequests = 0;
+      p.on('request', (request) => { if (new URL(request.url()).pathname === '/api/scan') scanRequests++; });
       await enterPin(p, USHER_PIN);
       await p.waitForURL(`${BASE}/scan`, { timeout: 15000 });
 
@@ -525,11 +599,21 @@ describe('QR decode — the camera actually READS a code and checks it in', () =
 
       // decode → submit → server transaction → granted banner
       await expectVisible(p.getByText('ACCESS GRANTED'), 30000);
+      expect(await p.locator('[data-decoder-ready="true"]').count()).toBe(1);
+      expect(await p.getByText(/QR decoder failed|not processing frames/).count()).toBe(0);
+      expect(scanRequests).toBe(1);
+      await p.waitForTimeout(1000);
+      expect(scanRequests).toBe(1);
       await expectVisible(p.getByText(`No. ${inv.serial}`), 5000);
 
       // the invitation is consumed in the emulator transaction
       const snap = await inv.ref.get();
       expect(snap.data()?.status).toBe('used');
+      await expectVisible(p.getByText('ALREADY USED ✗', { exact: true }), 15000);
+      await p.getByRole('button', { name: 'Pause scanner' }).click();
+      const stoppedCount = scanRequests;
+      await p.waitForTimeout(3000);
+      expect(scanRequests).toBe(stoppedCount);
       await ctx.close();
     } finally {
       await cam.close();

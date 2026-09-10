@@ -38,7 +38,7 @@ export function serialGeometryBelowQr(
     // so the serial now matches that same gold treatment instead of a
     // separate white tag.
     x: Math.round(qr.x + qr.size / 2),
-    y: Math.round(qr.y + qr.size + 0.0641 * canvasHeight), // nudged up ~6px, then a further 10px (owner requests 2026-09-10, at the 1470-tall reference)
+    y: Math.round(qr.y + qr.size + 0.0505 * canvasHeight), // nudged up ~6px, then +10px, then a further +20px (owner requests 2026-09-10, at the 1470-tall reference) — 36px total
     fontSize: Math.round(0.016 * canvasWidth),
     color: '#C5A059',
     plate: false,

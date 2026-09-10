@@ -122,3 +122,43 @@ export function useAdmin() {
 export function useSelectedEvent() {
   return useContext(SelectedEventContext);
 }
+
+// ---------------------------------------------------------------------------
+// Selected event's live summary (scanning state + totals) — fetched ONCE in
+// the admin layout so the header's Activate/Deactivate control and the
+// dashboard's status banner read the exact same data instead of each paging
+// firing its own request (and instead of rendering the admin's name/email
+// in two places, which is what broke the single-match "E2E Root Admin"
+// locator in tests/pwa/e2e.test.ts before this existed).
+// ---------------------------------------------------------------------------
+
+export type EventSummary = {
+  id: string;
+  name: string;
+  eventDate: string | null;
+  lifecycleStatus: string;
+  scanningEnabled: boolean;
+  scanningEnabledAt: string | null;
+  totals: { generated: number; used: number; revoked: number; unused: number; rescansAllowed: number };
+} | null;
+
+type EventSummaryContextValue = {
+  event: EventSummary;
+  loading: boolean;
+  error: string | null;
+  retry: () => void;
+};
+
+const EventSummaryContext = createContext<EventSummaryContextValue>({
+  event: null,
+  loading: false,
+  error: null,
+  retry: () => undefined,
+});
+
+export const EventSummaryProvider = EventSummaryContext.Provider;
+
+/** The selected event's live summary, shared by the header and the dashboard. */
+export function useEventSummary() {
+  return useContext(EventSummaryContext);
+}

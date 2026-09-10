@@ -1,19 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { adminJson } from '@/lib/client/api';
-import { useAdmin, useSelectedEvent } from '@/lib/client/useAdmin';
+import { useSelectedEvent, useEventSummary } from '@/lib/client/useAdmin';
 import { useAdminWidget } from '@/lib/client/useAdminWidget';
-
-type EventSummary = {
-  id: string;
-  name: string;
-  eventDate: string | null;
-  lifecycleStatus: string;
-  scanningEnabled: boolean;
-  scanningEnabledAt: string | null;
-  totals: { generated: number; used: number; revoked: number; unused: number; rescansAllowed: number };
-} | null;
 
 type Activity = {
   recentScans: { id: string; result: string; serialNumber: string | null; usherName: string | null; gateId: string | null; scannedAt: string | null }[];
@@ -55,15 +43,12 @@ function ErrorCard({ message, onRetry }: { message: string; onRetry: () => void 
 const card = 'rounded-xl border border-brand-ice-200 bg-white p-4 shadow-sm';
 
 export default function DashboardPage() {
-  const { can } = useAdmin();
   const { eventId } = useSelectedEvent();
-  const [confirm, setConfirm] = useState<'enable' | 'disable' | null>(null);
-  const [busy, setBusy] = useState(false);
+  // The Activate/Deactivate control lives in the header now (top right, on
+  // every admin page) — this page just reads the SAME shared summary to
+  // render the read-only status banner, no separate fetch of its own.
+  const eventSummary = useEventSummary();
 
-  const eventWidget = useAdminWidget<{ ok: boolean; event: EventSummary }>(
-    eventId ? `/api/admin/dashboard/event?eventId=${eventId}` : null,
-    { pollMs: 10000 }
-  );
   const activityWidget = useAdminWidget<Activity>(
     eventId ? `/api/admin/dashboard/activity?eventId=${eventId}` : null,
     { pollMs: 10000 }
@@ -77,29 +62,18 @@ export default function DashboardPage() {
     { pollMs: 30000 }
   );
 
-  async function toggleScanning(enabled: boolean) {
-    setBusy(true);
-    await adminJson(`/api/admin/events/${eventId}/scanning`, {
-      method: 'POST',
-      body: JSON.stringify({ enabled, confirm: true }),
-    }).catch(() => undefined);
-    setConfirm(null);
-    setBusy(false);
-    eventWidget.retry();
-  }
-
   if (!eventId) return <p className="text-brand-navy-700/60">Create or select an event first (Events page).</p>;
 
-  const ev = eventWidget.data?.event ?? null;
+  const ev = eventSummary.event;
 
   return (
     <div className="space-y-6">
       {/* Event + scanning banner — lightweight summary, loads first */}
       <div className={`rounded-2xl p-6 text-white ${ev?.scanningEnabled ? 'bg-emerald-700' : 'bg-brand-navy-900'}`}>
-        {eventWidget.loading ? (
+        {eventSummary.loading ? (
           <Skeleton rows={2} />
-        ) : eventWidget.error ? (
-          <ErrorCard message={eventWidget.error} onRetry={eventWidget.retry} />
+        ) : eventSummary.error ? (
+          <ErrorCard message={eventSummary.error} onRetry={eventSummary.retry} />
         ) : !ev ? (
           <p className="text-sm">Event not found. It may have been removed.</p>
         ) : (
@@ -114,39 +88,6 @@ export default function DashboardPage() {
                   {ev.eventDate ? new Date(ev.eventDate).toLocaleDateString() : ''} · last change {fmt(ev.scanningEnabledAt)}
                 </p>
               </div>
-              {can('canManageEvents') && (
-                <div className="space-y-2 text-right">
-                  <button
-                    onClick={() => ev.scanningEnabled ? setConfirm('disable') : setConfirm('enable')}
-                    className={`rounded-lg px-5 py-2.5 font-semibold ${
-                      ev.scanningEnabled ? 'bg-white text-red-700' : 'bg-emerald-500 text-white'
-                    }`}
-                  >
-                    {ev.scanningEnabled ? 'Deactivate Scanning' : 'Activate Scanning'}
-                  </button>
-                  {confirm && (
-                    <div className="rounded-lg bg-white p-3 text-left text-brand-navy-900 shadow-xl">
-                      <p className="mb-2 text-sm font-medium">
-                        {confirm === 'enable'
-                          ? 'Activate scanning for this event now? Gate officials will be able to admit guests.'
-                          : 'Deactivate scanning now? All gates will immediately stop admitting guests.'}
-                      </p>
-                      <div className="flex gap-2">
-                        <button
-                          disabled={busy}
-                          onClick={() => toggleScanning(confirm === 'enable')}
-                          className="rounded bg-brand-blue-500 px-3 py-1 text-sm text-white"
-                        >
-                          {confirm === 'enable' ? 'Yes, activate' : 'Yes, deactivate'}
-                        </button>
-                        <button onClick={() => setConfirm(null)} className="rounded border border-brand-ice-200 px-3 py-1 text-sm">
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
             <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
               {[

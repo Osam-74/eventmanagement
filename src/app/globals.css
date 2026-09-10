@@ -3,5 +3,5 @@
 @tailwind utilities;
 
 body {
-  @apply bg-stone-100 text-stone-900 antialiased;
+  @apply bg-brand-ice-50 text-brand-navy-900 antialiased;
 }

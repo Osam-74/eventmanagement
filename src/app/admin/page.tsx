@@ -35,7 +35,7 @@ function Skeleton({ rows = 3 }: { rows?: number }) {
   return (
     <div className="animate-pulse space-y-2" aria-label="Loading">
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="h-4 rounded bg-stone-100" />
+        <div key={i} className="h-4 rounded bg-brand-ice-100" />
       ))}
     </div>
   );
@@ -52,7 +52,7 @@ function ErrorCard({ message, onRetry }: { message: string; onRetry: () => void 
   );
 }
 
-const card = 'rounded-xl bg-white p-4 shadow-sm';
+const card = 'rounded-xl border border-brand-ice-200 bg-white p-4 shadow-sm';
 
 export default function DashboardPage() {
   const { can } = useAdmin();
@@ -88,14 +88,14 @@ export default function DashboardPage() {
     eventWidget.retry();
   }
 
-  if (!eventId) return <p className="text-stone-500">Create or select an event first (Events page).</p>;
+  if (!eventId) return <p className="text-brand-navy-700/60">Create or select an event first (Events page).</p>;
 
   const ev = eventWidget.data?.event ?? null;
 
   return (
     <div className="space-y-6">
       {/* Event + scanning banner — lightweight summary, loads first */}
-      <div className={`rounded-2xl p-6 text-white ${ev?.scanningEnabled ? 'bg-emerald-700' : 'bg-stone-800'}`}>
+      <div className={`rounded-2xl p-6 text-white ${ev?.scanningEnabled ? 'bg-emerald-700' : 'bg-brand-navy-900'}`}>
         {eventWidget.loading ? (
           <Skeleton rows={2} />
         ) : eventWidget.error ? (
@@ -125,7 +125,7 @@ export default function DashboardPage() {
                     {ev.scanningEnabled ? 'Deactivate Scanning' : 'Activate Scanning'}
                   </button>
                   {confirm && (
-                    <div className="rounded-lg bg-white p-3 text-left text-stone-800 shadow-xl">
+                    <div className="rounded-lg bg-white p-3 text-left text-brand-navy-900 shadow-xl">
                       <p className="mb-2 text-sm font-medium">
                         {confirm === 'enable'
                           ? 'Activate scanning for this event now? Gate officials will be able to admit guests.'
@@ -135,11 +135,11 @@ export default function DashboardPage() {
                         <button
                           disabled={busy}
                           onClick={() => toggleScanning(confirm === 'enable')}
-                          className="rounded bg-stone-900 px-3 py-1 text-sm text-white"
+                          className="rounded bg-brand-blue-500 px-3 py-1 text-sm text-white"
                         >
                           {confirm === 'enable' ? 'Yes, activate' : 'Yes, deactivate'}
                         </button>
-                        <button onClick={() => setConfirm(null)} className="rounded border border-stone-300 px-3 py-1 text-sm">
+                        <button onClick={() => setConfirm(null)} className="rounded border border-brand-ice-200 px-3 py-1 text-sm">
                           Cancel
                         </button>
                       </div>
@@ -175,19 +175,19 @@ export default function DashboardPage() {
           ) : ushersWidget.error ? (
             <ErrorCard message={ushersWidget.error} onRetry={ushersWidget.retry} />
           ) : ushersWidget.data && ushersWidget.data.ushers.length === 0 ? (
-            <p className="text-sm text-stone-500">No ushers created yet.</p>
+            <p className="text-sm text-brand-navy-700/60">No ushers created yet.</p>
           ) : (
             <table className="w-full text-sm">
               <tbody>
                 {ushersWidget.data?.ushers.map((u) => (
-                  <tr key={u.id} className="border-t border-stone-100">
+                  <tr key={u.id} className="border-t border-brand-ice-100">
                     <td className="py-1.5">
-                      <span className={`mr-2 inline-block h-2 w-2 rounded-full ${u.activeNow ? 'bg-emerald-500' : 'bg-stone-300'}`} />
-                      {u.name} {u.gateId && <span className="text-stone-400">({u.gateId})</span>}
+                      <span className={`mr-2 inline-block h-2 w-2 rounded-full ${u.activeNow ? 'bg-emerald-500' : 'bg-brand-ice-200'}`} />
+                      {u.name} {u.gateId && <span className="text-brand-navy-700/40">({u.gateId})</span>}
                       {!u.active && <span className="ml-1 text-red-500">disabled</span>}
                       {u.lockedUntil && <span className="ml-1 text-amber-600">locked</span>}
                     </td>
-                    <td className="py-1.5 text-right text-stone-500">
+                    <td className="py-1.5 text-right text-brand-navy-700/60">
                       ✓ {u.acceptedCount} · last seen {fmt(u.lastSeenAt)}
                     </td>
                   </tr>
@@ -206,7 +206,7 @@ export default function DashboardPage() {
             <ErrorCard message={activityWidget.error} onRetry={activityWidget.retry} />
           ) : (
             <>
-              <div className="mb-2 text-xs text-stone-500">
+              <div className="mb-2 text-xs text-brand-navy-700/60">
                 {activityWidget.data?.scanCounts.accepted ?? 0} accepted · {activityWidget.data?.scanCounts.rejected ?? 0} rejected
                 {' · latest '} {fmt(activityWidget.data?.latestScanAt ?? null)}
               </div>
@@ -214,7 +214,7 @@ export default function DashboardPage() {
                 <table className="w-full text-sm">
                   <tbody>
                     {activityWidget.data?.recentScans.map((s) => (
-                      <tr key={s.id} className="border-t border-stone-100">
+                      <tr key={s.id} className="border-t border-brand-ice-100">
                         <td className="py-1.5">
                           <span
                             className={`mr-2 font-medium ${
@@ -225,11 +225,11 @@ export default function DashboardPage() {
                           </span>
                           {s.serialNumber ?? 'unknown card'} · {s.usherName ?? ''}
                         </td>
-                        <td className="py-1.5 text-right text-stone-500">{fmt(s.scannedAt)}</td>
+                        <td className="py-1.5 text-right text-brand-navy-700/60">{fmt(s.scannedAt)}</td>
                       </tr>
                     ))}
                     {activityWidget.data?.recentScans.length === 0 && (
-                      <tr><td className="text-stone-500">No scans yet.</td></tr>
+                      <tr><td className="text-brand-navy-700/60">No scans yet.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -247,15 +247,15 @@ export default function DashboardPage() {
         ) : batchesWidget.error ? (
           <ErrorCard message={batchesWidget.error} onRetry={batchesWidget.retry} />
         ) : batchesWidget.data && batchesWidget.data.batches.length === 0 ? (
-          <p className="text-sm text-stone-500">No batches yet. Generate invitations from the Generate page.</p>
+          <p className="text-sm text-brand-navy-700/60">No batches yet. Generate invitations from the Generate page.</p>
         ) : (
           <table className="w-full text-sm">
             <tbody>
               {batchesWidget.data?.batches.map((b) => (
-                <tr key={b.id} className="border-t border-stone-100">
+                <tr key={b.id} className="border-t border-brand-ice-100">
                   <td className="py-1.5">{b.completedQuantity}/{b.requestedQuantity} cards ({b.outputProfile})</td>
-                  <td className="py-1.5 text-stone-500">{b.status}</td>
-                  <td className="py-1.5 text-right text-stone-500">{fmt(b.createdAt)}</td>
+                  <td className="py-1.5 text-brand-navy-700/60">{b.status}</td>
+                  <td className="py-1.5 text-right text-brand-navy-700/60">{fmt(b.createdAt)}</td>
                 </tr>
               ))}
             </tbody>

@@ -32,7 +32,7 @@ export const SENSITIVE_API_PREFIX = '/api/';
 // serving the PREVIOUS build's HTML (StaleWhileRevalidate showed the stale
 // shell first) with no self-heal. That is exactly how ushers ended up on
 // an old scan page: camera never scanned, manual entry missing.
-export const APP_CACHE_VERSION = 'event-access/v1.3.3';
+export const APP_CACHE_VERSION = 'event-access/v1.3.4';
 
 /**
  * All runtime caching rules, in matching order. The /api NetworkOnly rule is

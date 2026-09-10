@@ -4,7 +4,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 
 const iso = (v: unknown): string | null => (v instanceof Timestamp ? v.toDate().toISOString() : null);
 import { digestToken } from '@/lib/qr/digest';
-import { normalizeSerial, hyphenateSerial } from '@/lib/invitation/serial';
+import { normalizeSerial, hyphenateSerialCandidates } from '@/lib/invitation/serial';
 import { badRequest, requirePermission } from '@/lib/api/helpers';
 
 export const runtime = 'nodejs';
@@ -64,11 +64,11 @@ export async function GET(req: NextRequest) {
     // 1) exact serial lookup — cover BOTH stored shapes: new cards print
     // the hyphenless serial, cards generated before the format change
     // keep the legacy "CODE-#####" form in Firestore.
-    const hyphenated = hyphenateSerial(serial);
+    const forms = [serial, ...hyphenateSerialCandidates(serial)];
     const bySerial = await db()
       .collection('invitations')
       .where('eventId', '==', eventId)
-      .where('serialNumber', 'in', hyphenated ? [serial, hyphenated] : [serial])
+      .where('serialNumber', 'in', forms)
       .limit(20)
       .get();
     items = bySerial.docs.map((d) => toDTO(d.id, d.data() as Record<string, unknown>));

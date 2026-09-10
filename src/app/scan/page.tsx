@@ -50,7 +50,6 @@ export default function ScannerPage() {
   const [starting, setStarting] = useState(false);
   const [result, setResult] = useState<ScanResult | null>(null);
   const [online, setOnline] = useState(true);
-  const [sessionAccepted, setSessionAccepted] = useState(0);
   const [cameraError, setCameraError] = useState('');
 
   const scannerRef = useRef<Html5Qrcode | null>(null);
@@ -163,7 +162,6 @@ export default function ScannerPage() {
       const body = await res.json();
       if (body.code === 'ACCEPTED') {
         setResult({ kind: 'granted', serial: body.serialNumber ?? null, at: body.checkedInAt ?? null });
-        setSessionAccepted((c) => c + 1);
         setSession((s) => (s ? { ...s, acceptedCount: s.acceptedCount + 1 } : s));
         beep(true);
       } else {
@@ -295,7 +293,7 @@ export default function ScannerPage() {
           <span className={`rounded px-2 py-1 ${session.scanningEnabled ? 'bg-emerald-600' : 'bg-red-600'}`}>
             {session.scanningEnabled ? 'Scanning ACTIVE' : 'EVENT NOT OPEN'}
           </span>
-          <span className="rounded bg-stone-700 px-2 py-1">Admitted: {sessionAccepted}</span>
+          <span className="rounded bg-stone-700 px-2 py-1">Admitted: {session.acceptedCount}</span>
         </div>
 
         {disabledBanner && (

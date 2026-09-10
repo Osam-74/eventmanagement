@@ -132,6 +132,8 @@ describe('service worker cache policy', () => {
 
   it('caches HTML shell but never /api HTML-adjacent requests', () => {
     const html = runtimeCacheEntries.find((e) => matches(e as never, 'GET', '/'));
-    expect(html?.handler).toBeInstanceOf(StaleWhileRevalidate);
+    // Documents must be NetworkFirst: an installed PWA must never serve the
+    // previous build's shell while online (stale scan page on event day).
+    expect(html?.handler).toBeInstanceOf(NetworkFirst);
   });
 });

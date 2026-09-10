@@ -1,5 +1,6 @@
 import sharp from 'sharp';
 import QRCode from 'qrcode';
+import { measureSerialWidth, serialToSvgPaths } from '@/lib/invitation/serialGlyphs';
 
 export type TemplateGeometry = {
   canvasWidth: number;
@@ -65,16 +66,21 @@ export async function renderInvitationImage(opts: {
   ];
 
   if (geometry.serial?.enabled) {
+    // The serial is drawn as VECTOR PATHS, not SVG <text>: sharp renders
+    // <text> through fontconfig, and the Vercel serverless image ships no
+    // usable fonts — the serial silently came out blank on production
+    // cards. Paths render identically on every host. See serialGlyphs.ts.
     const fontSize = Math.round(geometry.serial.fontSize * scale);
     const sx = Math.round(geometry.serial.x * scale);
     const sy = Math.round(geometry.serial.y * scale);
-    let content = `<text x="${sx}" y="${sy}" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="${fontSize}" font-weight="600" fill="${escapeXml(
-      geometry.serial.color
-    )}" text-anchor="middle" letter-spacing="${Math.round(fontSize * 0.08)}">${escapeXml(serial)}</text>`;
+    const letterSpacing = Math.round(fontSize * 0.08);
+    const textW = measureSerialWidth(serial, fontSize, letterSpacing);
+    const color = escapeXml(geometry.serial.color);
+    let content = serialToSvgPaths(serial, sx, sy, fontSize, letterSpacing, color);
     if (geometry.serial.plate) {
       // White rounded plate guarantees the serial is legible on ANY
       // artwork background (gold frame, dark motif, photo).
-      const plateW = Math.round(serial.length * fontSize * 0.64 + fontSize * 1.6);
+      const plateW = Math.round(textW + fontSize * 1.6);
       const plateH = Math.round(fontSize * 1.7);
       const plateX = Math.round(sx - plateW / 2);
       const plateY = Math.round(sy - fontSize * 1.18);

@@ -1,7 +1,7 @@
 import type { Firestore } from 'firebase-admin/firestore';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { digestToken } from '@/lib/qr/digest';
-import { normalizeSerial, hyphenateSerial } from '@/lib/invitation/serial';
+import { normalizeSerial, hyphenateSerialCandidates } from '@/lib/invitation/serial';
 import { isPlausibleToken } from '@/lib/qr/token';
 
 export type ScanOutcomeCode =
@@ -86,7 +86,7 @@ async function performScanOnce(firestore: Firestore, input: ScanInput): Promise<
   if (!isPlausibleToken(token)) {
     const normalized = normalizeSerial(token);
     if (normalized.length >= 4) {
-      const forms = [normalized, hyphenateSerial(normalized) ?? normalized];
+      const forms = [normalized, ...hyphenateSerialCandidates(normalized)];
       const snap = await firestore
         .collection('invitations')
         .where('serialNumber', 'in', forms)

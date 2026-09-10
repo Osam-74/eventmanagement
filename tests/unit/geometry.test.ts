@@ -5,7 +5,7 @@ import {
   REFERENCE_CANVAS,
   REFERENCE_QR_BOX,
 } from '@/lib/invitation/geometry';
-import { formatSerial, normalizeSerial, hyphenateSerial } from '@/lib/invitation/serial';
+import { formatSerial, normalizeSerial, hyphenateSerial, hyphenateSerialCandidates } from '@/lib/invitation/serial';
 
 describe('resolveSerialGeometry', () => {
   it('ALWAYS resolves to the approved near-QR plate placement (owner decision)', () => {
@@ -93,5 +93,17 @@ describe('serial format (hyphenless — code and number together)', () => {
     expect(hyphenateSerial('ISWED00042')).toBe('ISWED-00042');
     expect(hyphenateSerial('E2E12345')).toBe('E2E-12345');
     expect(hyphenateSerial('NOT-A-SERIAL')).toBeNull();
+  });
+
+  it('hyphenateSerialCandidates covers ALL plausible splits when the event code itself ends in digits — the ambiguous case a single guess would miss', () => {
+    // "IS26" + "00201" normalizes to "IS2600201". The last letter is at
+    // index 1 ('S'), so the naive last-letter-boundary guess would only
+    // produce "IS-2600201" and MISS a card printed as "IS26-00201".
+    // hyphenateSerialCandidates() must return both possible splits.
+    const candidates = hyphenateSerialCandidates('IS2600201');
+    expect(candidates).toContain('IS26-00201');
+    expect(candidates).toContain('IS-2600201');
+    // Unambiguous shape (code is all letters) still returns exactly one.
+    expect(hyphenateSerialCandidates('ISWED00042')).toEqual(['ISWED-00042']);
   });
 });

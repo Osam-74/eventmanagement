@@ -20,12 +20,48 @@ export function formatSerial(eventCode: string, sequence: number): string {
  * new cards print hyphenless serials, cards generated before the format
  * change keep "CODE-#####" in Firestore. Returns null for shapes that
  * carry no letter/digit split (nothing meaningful to hyphenate).
+ *
+ * When the event code itself ends in digits (e.g. "IS26"), "last
+ * letter→digit boundary" is ambiguous — "IS2600042" could split as
+ * "IS-2600042" or "IS26-00042". Returning a single guess silently picks
+ * the wrong one and the lookup misses. hyphenateSerialCandidates() below
+ * returns every plausible split so callers can query them all; this
+ * function keeps the single-best-guess shape for callers that only need
+ * a display string, not a lookup.
  */
 export function hyphenateSerial(normalized: string): string | null {
-  // code part may itself contain digits (e.g. E2E, IS26) — split at the
-  // LAST letter→digit boundary; the trailing digit run is the sequence.
-  const m = /^(.*[A-Z])(\d+)$/.exec(normalized);
-  return m ? `${m[1]}-${m[2]}` : null;
+  const candidates = hyphenateSerialCandidates(normalized);
+  return candidates[0] ?? null;
+}
+
+/**
+ * Every plausible hyphenation of a normalized serial, split at each
+ * letter→digit boundary (rightmost first) where the tail is digits-only.
+ * For "ISWED00042" (code has no trailing digits) there is exactly one:
+ * ["ISWED-00042"]. For "IS2600042" (code "IS26" ends in digits) there are
+ * two: ["IS-2600042", "IS26-00042"] — both must be tried since the
+ * boundary can't be recovered from the string alone.
+ */
+export function hyphenateSerialCandidates(normalized: string): string[] {
+  const out: string[] = [];
+  const push = (v: string) => {
+    if (!out.includes(v)) out.push(v);
+  };
+  // Serial sequences are ALWAYS 5 digits (formatSerial pads to 5), so the
+  // single most plausible split is at the last 5 digits — this also finds
+  // digit→digit boundaries (code "IS26") that no letter-scan can detect.
+  const five = /^(.+)(\d{5})$/.exec(normalized);
+  if (five) push(`${five[1]}-${five[2]}`);
+  // Then every letter→digit boundary, for any other stored shape.
+  for (let i = normalized.length - 1; i >= 0; i--) {
+    if (/[A-Z]/.test(normalized[i])) {
+      const tail = normalized.slice(i + 1);
+      if (tail.length > 0 && /^\d+$/.test(tail)) {
+        push(`${normalized.slice(0, i + 1)}-${tail}`);
+      }
+    }
+  }
+  return out;
 }
 
 export function eventCodeFromSlug(slug: string): string {

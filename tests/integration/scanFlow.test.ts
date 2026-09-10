@@ -49,6 +49,18 @@ describe.skipIf(!hasEmu)('manual serial entry (usher types the printed serial)',
     expect(out.code).toBe('ACCEPTED');
   });
 
+  it('mixed-case and lowercase manual entry with hyphen variations all resolve (usher may type either case)', async () => {
+    await seedInvitation(db!.db, { serialNumber: 'IS26-00201' });
+    for (const typed of ['is26-00201', 'IS2600201', 'Is26 00201', 'iS26-00201']) {
+      // fresh invitation each iteration would consume it once — verify
+      // normalization independently by checking INVALID never fires for
+      // any of these case/format variants (ALREADY_USED after the first
+      // proves the SAME record was matched, not four different lookups).
+      const out = await scan(typed);
+      expect(out.code === 'ACCEPTED' || out.code === 'ALREADY_USED').toBe(true);
+    }
+  });
+
   it('unknown serial → INVALID, never fabricated as granted', async () => {
     const out = await scan('ISWED99999');
     expect(out.code).toBe('INVALID');

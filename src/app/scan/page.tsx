@@ -190,20 +190,43 @@ export default function ScannerPage() {
     setCameraError('');
     try {
       const { Html5Qrcode } = await import('html5-qrcode');
+      // #qr-reader is ALWAYS mounted (below), so the library can attach its
+      // video element and actually call getUserMedia — the browser permission
+      // prompt only appears if the container exists at this moment.
       const scanner = new Html5Qrcode('qr-reader', { verbose: false });
       scannerRef.current = scanner;
-      await scanner.start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        (decodedText) => submitToken(decodedText),
-        () => undefined
-      );
+      const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+      const onScan = (decodedText: string) => submitToken(decodedText);
+      try {
+        await scanner.start({ facingMode: 'environment' }, config, onScan, () => undefined);
+      } catch (e) {
+        // Devices without a rear camera (e.g. laptops) can reject the
+        // facingMode constraint — fall back to any available camera.
+        const name = (e as { name?: string })?.name ?? '';
+        if (name === 'OverconstrainedError' || name === 'ConstraintNotSatisfiedError') {
+          await scanner.start({}, config, onScan, () => undefined);
+        } else {
+          throw e;
+        }
+      }
       setScanning(true);
       setResult(null);
-    } catch {
-      setCameraError(
-        'Could not start the camera. Tap the ⓘ icon next to the address bar (or Settings → Site permissions), allow Camera for this site, then tap Start Scanner again.'
-      );
+    } catch (e) {
+      // html5-qrcode throws plain strings for its own errors and
+      // DOMExceptions (with .name) for getUserMedia failures — distinguish
+      // them so ushers get the RIGHT instruction, not a generic one.
+      const name = (e as { name?: string })?.name ?? String(e);
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        setCameraError(
+          'Camera permission was denied. Tap the ⓘ icon next to the address bar (or Settings → Site permissions → Camera), allow Camera for this site, then tap Start Scanner again.'
+        );
+      } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+        setCameraError('No camera was found on this device. Use manual entry below.');
+      } else if (name === 'NotReadableError' || name === 'TrackStartError') {
+        setCameraError('The camera is in use by another app. Close other camera apps, then tap Start Scanner again.');
+      } else {
+        setCameraError('Could not start the camera. Tap Start Scanner again, or use manual entry below.');
+      }
     } finally {
       setStarting(false);
     }
@@ -266,6 +289,20 @@ export default function ScannerPage() {
           <div className="mt-4 rounded-lg bg-amber-600 p-4 text-sm font-medium">{cameraError}</div>
         )}
 
+        <div className="mt-4">
+          {/* ALWAYS mounted and never display:none: html5-qrcode needs a
+              real container (with layout) when start() runs, or it throws or
+              stalls before requesting the camera — no permission prompt would
+              ever appear. Empty div = zero height, so it's invisible until
+              the scanner injects its video. */}
+          <div id="qr-reader" className="overflow-hidden rounded-xl" />
+          {scanning && (
+            <button onClick={stopScanner} className="mt-3 w-full rounded-lg border border-stone-600 py-2 text-sm">
+              Pause scanner
+            </button>
+          )}
+        </div>
+
         {!scanning ? (
           <div className="mt-8 text-center">
             <button
@@ -294,14 +331,7 @@ export default function ScannerPage() {
               </form>
             </div>
           </div>
-        ) : (
-          <div className="mt-4">
-            <div id="qr-reader" className="overflow-hidden rounded-xl" />
-            <button onClick={stopScanner} className="mt-3 w-full rounded-lg border border-stone-600 py-2 text-sm">
-              Pause scanner
-            </button>
-          </div>
-        )}
+        ) : null}
 
         {result && (
           <div

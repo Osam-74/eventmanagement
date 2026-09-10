@@ -384,10 +384,41 @@ describe('camera denial', () => {
     await enterPin(p, USHER_PIN);
     await p.waitForURL(`${BASE}/scan`, { timeout: 15000 });
     await p.getByRole('button', { name: /Start Scanner/ }).click();
-    // Headless Chromium denies getUserMedia → the catch path must show the
-    // permission instruction. Real-device camera behavior is verified on
-    // owner phones.
-    await expectVisible(p.getByText(/Could not start the camera/i), 30000);
+    // getUserMedia is denied → the catch path must show the permission
+    // instruction (NOT a crash or a silent hang).
+    await expectVisible(p.getByText(/Could not start the camera|Camera permission was denied/i), 30000);
     await ctx.close();
+  });
+});
+
+describe('camera start', () => {
+  // Regression: the scanner container must be mounted BEFORE html5-qrcode
+  // starts, or the library throws before ever calling getUserMedia — the
+  // browser prompt never appears and the usher sees a bogus "allow camera
+  // manually" error. Fake media stream simulates a working camera.
+  it('actually starts the camera when permission is granted (prompt would appear on a real device)', async () => {
+    const fakeCam = await chromium.launch({
+      args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
+    });
+    try {
+      const ctx = await fakeCam.newContext();
+      const p = await ctx.newPage();
+      await enterPin(p, USHER_PIN);
+      await p.waitForURL(`${BASE}/scan`, { timeout: 15000 });
+
+      // container is ATTACHED even before scanning starts (visibility is
+      // irrelevant — html5-qrcode only needs it present in the DOM)
+      await p.locator('#qr-reader').waitFor({ state: 'attached', timeout: 10000 });
+
+      await p.getByRole('button', { name: /Start Scanner/ }).click();
+      // video element injected by html5-qrcode = getUserMedia really ran
+      await expectVisible(p.locator('#qr-reader video'), 30000);
+      await expectVisible(p.getByRole('button', { name: /Pause scanner/i }), 10000);
+      // no error banner
+      expect(await p.getByText(/Could not start the camera|Camera permission was denied/i).count()).toBe(0);
+      await ctx.close();
+    } finally {
+      await fakeCam.close();
+    }
   });
 });

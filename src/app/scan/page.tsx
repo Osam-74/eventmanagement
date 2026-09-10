@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Html5Qrcode } from 'html5-qrcode';
+import type QrScanner from 'qr-scanner';
 import { shouldSubmitToken } from '@/lib/client/scanClient';
 
 type SessionInfo = {
@@ -52,7 +52,8 @@ export default function ScannerPage() {
   const [online, setOnline] = useState(true);
   const [cameraError, setCameraError] = useState('');
 
-  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const scannerRef = useRef<QrScanner | null>(null);
   const busyRef = useRef(false);
   const lastTokenRef = useRef<{ token: string; at: number }>({ token: '', at: 0 });
 
@@ -114,16 +115,14 @@ export default function ScannerPage() {
 
   useEffect(() => {
     return () => {
-      const s = scannerRef.current;
-      if (s) s.stop().then(() => s.clear()).catch(() => undefined);
+      scannerRef.current?.destroy();
+      scannerRef.current = null;
     };
   }, []);
 
   async function signOut() {
     await fetch('/api/usher/signout', { method: 'POST' }).catch(() => undefined);
-    if (scannerRef.current) {
-      scannerRef.current.stop().catch(() => undefined);
-    }
+    scannerRef.current?.stop();
     setSession(null);
     setScanning(false);
     router.replace('/usher/login');
@@ -187,51 +186,39 @@ export default function ScannerPage() {
     setStarting(true);
     setCameraError('');
     try {
-      const { Html5Qrcode } = await import('html5-qrcode');
-      // #qr-reader is ALWAYS mounted (below), so the library can attach its
-      // video element and actually call getUserMedia — the browser permission
-      // prompt only appears if the container exists at this moment.
-      // useBarCodeDetectorIfSupported: false is critical on Android Chrome:
-      // the native BarcodeDetector path can silently detect NOTHING (camera
-      // shows, QR never fires) on several devices/versions — forcing the
-      // battle-tested pure-JS decoder makes detection reliable everywhere.
-      const scanner = new Html5Qrcode('qr-reader', {
-        verbose: false,
-        useBarCodeDetectorIfSupported: false,
-      });
-      scannerRef.current = scanner;
-      // fps 15 = fast pickup; qrbox as a function keeps the scan region
-      // responsive (70% of the viewfinder) so ushers don't have to aim
-      // precisely — point at the card and it reads.
-      const config = {
-        fps: 15,
-        qrbox: (vw: number, vh: number) => {
-          const edge = Math.floor(Math.min(vw, vh) * 0.7);
-          return { width: edge, height: edge };
-        },
-      };
-      const onScan = (decodedText: string) => submitToken(decodedText);
-      try {
-        // NOTE: html5-qrcode requires this object to have EXACTLY ONE key
-        // ({facingMode} or {deviceId}) — adding width/height constraints
-        // here throws "should have exactly 1 key" and the camera never starts.
-        await scanner.start({ facingMode: 'environment' }, config, onScan, () => undefined);
-      } catch (e) {
-        // Devices without a rear camera (e.g. laptops) can reject the
-        // facingMode constraint — fall back to any available camera.
-        const name = (e as { name?: string })?.name ?? '';
-        if (name === 'OverconstrainedError' || name === 'ConstraintNotSatisfiedError') {
-          await scanner.start({}, config, onScan, () => undefined);
-        } else {
-          throw e;
+      const { default: QrScannerCtor } = await import('qr-scanner');
+      // The camera-shows-but-never-decodes symptom we chased with the old
+      // library traced back to the native BarcodeDetector path silently
+      // detecting nothing on some Android builds. qr-scanner uses
+      // BarcodeDetector when present too — force it off so every device
+      // runs the same battle-tested WASM/worker decoder, on a dedicated
+      // thread (this is also what makes it feel genuinely "live": decoding
+      // never blocks the main thread/UI the way the old canvas-based
+      // decode loop could).
+      (QrScannerCtor as unknown as { _disableBarcodeDetector: boolean })._disableBarcodeDetector = true;
+
+      const video = videoRef.current;
+      if (!video) throw new Error('Video element not mounted');
+
+      const scanner = new QrScannerCtor(
+        video,
+        (result) => submitToken(result.data),
+        {
+          onDecodeError: () => undefined, // fires every frame with no code — expected noise
+          highlightScanRegion: true,
+          highlightCodeOutline: true,
+          maxScansPerSecond: 12,
+          preferredCamera: 'environment',
         }
-      }
+      );
+      scannerRef.current = scanner;
+      await scanner.start();
       setScanning(true);
       setResult(null);
     } catch (e) {
-      // html5-qrcode throws plain strings for its own errors and
-      // DOMExceptions (with .name) for getUserMedia failures — distinguish
-      // them so ushers get the RIGHT instruction, not a generic one.
+      // qr-scanner surfaces getUserMedia's DOMException (with .name) directly,
+      // or a plain string/Error when no camera exists — distinguish them so
+      // ushers get the RIGHT instruction, not a generic one.
       const name = (e as { name?: string })?.name ?? String(e);
       if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
         setCameraError(
@@ -244,18 +231,15 @@ export default function ScannerPage() {
       } else {
         setCameraError('Could not start the camera. Tap Start Scanner again, or use manual entry below.');
       }
+      scannerRef.current?.destroy();
+      scannerRef.current = null;
     } finally {
       setStarting(false);
     }
   }
 
   async function stopScanner() {
-    const s = scannerRef.current;
-    if (s) {
-      await s.stop().catch(() => undefined);
-      s.clear();
-    }
-    scannerRef.current = null;
+    scannerRef.current?.stop();
     setScanning(false);
   }
 
@@ -307,12 +291,18 @@ export default function ScannerPage() {
         )}
 
         <div className="mt-4">
-          {/* ALWAYS mounted and never display:none: html5-qrcode needs a
-              real container (with layout) when start() runs, or it throws or
-              stalls before requesting the camera — no permission prompt would
-              ever appear. Empty div = zero height, so it's invisible until
-              the scanner injects its video. */}
-          <div id="qr-reader" className="overflow-hidden rounded-xl" />
+          {/* ALWAYS mounted (never display:none/unmounted): qr-scanner attaches
+              its live decode loop directly to this <video> element, so it must
+              already exist in the DOM before start() runs. muted+playsInline
+              are required for iOS Safari to actually play the stream inline
+              instead of forcing fullscreen (which breaks frame capture). */}
+          <video
+            id="qr-video"
+            ref={videoRef}
+            muted
+            playsInline
+            className="w-full rounded-xl bg-stone-950"
+          />
           {scanning && (
             <button onClick={stopScanner} className="mt-3 w-full rounded-lg border border-stone-600 py-2 text-sm">
               Pause scanner

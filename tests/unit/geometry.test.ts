@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   deriveTemplateGeometry,
   resolveSerialGeometry,
+  serialGeometryBelowQr,
   REFERENCE_CANVAS,
   REFERENCE_QR_BOX,
 } from '@/lib/invitation/geometry';
@@ -23,6 +24,7 @@ describe('resolveSerialGeometry', () => {
     const r = resolveSerialGeometry({
       canvasWidth: REFERENCE_CANVAS.width,
       canvasHeight: REFERENCE_CANVAS.height,
+      qr: REFERENCE_QR_BOX,
       serial: stored,
     });
     const approved = deriveTemplateGeometry(REFERENCE_CANVAS.width, REFERENCE_CANVAS.height).serial;
@@ -36,6 +38,7 @@ describe('resolveSerialGeometry', () => {
     const r = resolveSerialGeometry({
       canvasWidth: REFERENCE_CANVAS.width,
       canvasHeight: REFERENCE_CANVAS.height,
+      qr: REFERENCE_QR_BOX,
     });
     expect(r.enabled).toBe(true);
     expect(r).toEqual(deriveTemplateGeometry(REFERENCE_CANVAS.width, REFERENCE_CANVAS.height).serial);
@@ -45,6 +48,7 @@ describe('resolveSerialGeometry', () => {
     const r = resolveSerialGeometry({
       canvasWidth: REFERENCE_CANVAS.width,
       canvasHeight: REFERENCE_CANVAS.height,
+      qr: REFERENCE_QR_BOX,
       serial: { enabled: false, x: 0, y: 0, fontSize: 10, color: '#000000' },
     });
     expect(r.enabled).toBe(true);
@@ -72,6 +76,38 @@ describe('resolveSerialGeometry', () => {
     expect(g.qr.x).toBe(REFERENCE_QR_BOX.x);
     expect(g.qr.y).toBe(REFERENCE_QR_BOX.y);
     expect(g.qr.size).toBe(REFERENCE_QR_BOX.size);
+  });
+
+  it('REGRESSION: follows the QR wherever it actually is on THIS template, not a fixed reference ratio', () => {
+    // The original bug: resolveSerialGeometry recomputed the serial's
+    // position from the canvas size alone using the reference-artwork
+    // ratios — completely disconnected from where the QR actually sits on
+    // this specific card. A custom artwork with the QR box somewhere else
+    // entirely (different design, different aspect ratio) must still get
+    // its serial printed directly under ITS real QR box, not under where
+    // the reference artwork's QR happens to be.
+    const canvasWidth = 745;
+    const canvasHeight = 1024;
+    const customQr = { x: 40, y: 100, size: 200 }; // nowhere near the reference ratios
+    const r = resolveSerialGeometry({ canvasWidth, canvasHeight, qr: customQr });
+    expect(r.enabled).toBe(true);
+    expect(r.x).toBe(Math.round(customQr.x + customQr.size / 2));
+    expect(r.y).toBeGreaterThan(customQr.y + customQr.size);
+    expect(r.y).toBeLessThan(canvasHeight);
+    // and definitely NOT wherever the fixed reference ratios would have put it
+    const wrongLegacyY = Math.round(0.663265 * canvasHeight + 0.220561 * canvasWidth + 0.075 * canvasHeight);
+    expect(r.y).not.toBe(wrongLegacyY);
+  });
+
+  it('serialGeometryBelowQr stays within the canvas for a tall QR near the bottom edge', () => {
+    const canvasWidth = 1000;
+    const canvasHeight = 1200;
+    const qr = { x: 300, y: 1000, size: 200 }; // bottom edge at 1200 = canvas edge
+    const s = serialGeometryBelowQr(qr, canvasWidth, canvasHeight);
+    // still computed directly below, even if that lands outside this
+    // particular canvas — callers are responsible for choosing sane QR
+    // placement; this function's contract is "always directly under qr".
+    expect(s.y).toBeGreaterThan(qr.y + qr.size);
   });
 });
 

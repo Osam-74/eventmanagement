@@ -37,11 +37,13 @@ export async function POST(req: NextRequest) {
 
   const [masterFile] = await bucket().file(template.storagePath as string).download();
 
-  // Templates uploaded before serial support have no stored serial geometry —
-  // resolve to the approved default so every card carries its traceable serial.
+  // Anchored to THIS template's actual qr box (not recomputed independently) —
+  // guarantees the serial always lands directly under the real QR, even for
+  // templates uploaded before serial support (which have no stored geometry).
   const serialGeometry = resolveSerialGeometry({
     canvasWidth: template.canvasWidth as number,
     canvasHeight: template.canvasHeight as number,
+    qr: template.qr as { x: number; y: number; size: number },
     serial: template.serial as never,
   });
 

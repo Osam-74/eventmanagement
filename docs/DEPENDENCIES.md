@@ -8,7 +8,7 @@ Recorded per the library-first policy (spec §6). Versions are pinned via
 | next | 15.x (locked) | MIT | Required App Router + API routes + Vercel first-class support | Remix, Express+SPA | Runtime Node required for image/zip routes |
 | firebase / firebase-admin | 11.x / 13.x (locked) | Apache-2.0 | Official SDKs; Auth, Firestore (transactions), Storage, signed URLs | Supabase | Admin SDK bypasses security rules (server-only) |
 | qrcode (node-qrcode) | 1.5.4 | MIT | Mature encoder with error-correction control + buffer output | qr-code-styling (browser, unmaintained) | Server-side render at final pixel density, EC level Q |
-| html5-qrcode | 2.3.8 | MIT | Single dependency covering camera lifecycle + decoding; simplest reliable repeated-scan behavior on phones | @zxing/browser | If real-device tests favour zxing, swap is isolated to `src/app/scan/page.tsx` |
+| qr-scanner | 1.4.2 | MIT | Worker/WASM-based live decode (off main thread) + native BarcodeDetector when reliable; replaced html5-qrcode 2.3.8 after production reports of camera-on-but-never-decodes (native BarcodeDetector silently detecting nothing on some Android builds even after disabling it) | @zxing/browser | Swap is isolated to `src/app/scan/page.tsx` |
 | sharp | 0.33.5 | Apache-2.0 | Standard compositing/resizing, fast, Vercel-supported | jimp (pure JS, slower), canvas | `serverExternalPackages` set in next.config |
 | archiver | 7.0.1 | MIT | Streaming ZIP — never buffers a whole batch in RAM | zip.js (browser-focused) | Used in batch download route |
 | zod | 3.24.1 | MIT | Schema validation on every API input | Yup | Strict typing + .safeParse pattern |

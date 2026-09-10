@@ -461,10 +461,10 @@ describe('camera denial', () => {
 });
 
 describe('camera start', () => {
-  // Regression: the scanner container must be mounted BEFORE html5-qrcode
-  // starts, or the library throws before ever calling getUserMedia — the
-  // browser prompt never appears and the usher sees a bogus "allow camera
-  // manually" error. Fake media stream simulates a working camera.
+  // Regression: the <video> element must be mounted BEFORE qr-scanner
+  // starts, or it has no element to attach to and never calls getUserMedia —
+  // the browser prompt never appears and the usher sees a bogus "allow
+  // camera manually" error. Fake media stream simulates a working camera.
   it('actually starts the camera when permission is granted (prompt would appear on a real device)', async () => {
     const fakeCam = await chromium.launch({
       args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
@@ -475,13 +475,14 @@ describe('camera start', () => {
       await enterPin(p, USHER_PIN);
       await p.waitForURL(`${BASE}/scan`, { timeout: 15000 });
 
-      // container is ATTACHED even before scanning starts (visibility is
-      // irrelevant — html5-qrcode only needs it present in the DOM)
-      await p.locator('#qr-reader').waitFor({ state: 'attached', timeout: 10000 });
+      // <video> is ATTACHED even before scanning starts (visibility is
+      // irrelevant — qr-scanner only needs it present in the DOM before
+      // start() is called)
+      await p.locator('#qr-video').waitFor({ state: 'attached', timeout: 10000 });
 
       await p.getByRole('button', { name: /Start Scanner/ }).click();
-      // video element injected by html5-qrcode = getUserMedia really ran
-      await expectVisible(p.locator('#qr-reader video'), 30000);
+      // the video element actually starts playing = getUserMedia really ran
+      await expectVisible(p.locator('#qr-video'), 30000);
       await expectVisible(p.getByRole('button', { name: /Pause scanner/i }), 10000);
       // no error banner
       expect(await p.getByText(/Could not start the camera|Camera permission was denied/i).count()).toBe(0);
@@ -495,7 +496,7 @@ describe('camera start', () => {
 describe('QR decode — the camera actually READS a code and checks it in', () => {
   // The ultimate scanner regression: a real QR image is fed through
   // Chromium's fake camera (--use-file-for-fake-device-capture) so the
-  // whole chain runs: getUserMedia → html5-qrcode decode → /api/scan
+  // whole chain runs: getUserMedia → qr-scanner decode → /api/scan
   // transaction → ACCESS GRANTED. Guards against the "camera shows but
   // nothing ever scans" failure mode (native BarcodeDetector path).
   it.skipIf(!FFMPEG_OK)('points the camera at a card and gets ACCESS GRANTED automatically', async () => {
@@ -520,7 +521,7 @@ describe('QR decode — the camera actually READS a code and checks it in', () =
       await p.waitForURL(`${BASE}/scan`, { timeout: 15000 });
 
       await p.getByRole('button', { name: /Start Scanner/ }).click();
-      await expectVisible(p.locator('#qr-reader video'), 30000);
+      await expectVisible(p.locator('#qr-video'), 30000);
 
       // decode → submit → server transaction → granted banner
       await expectVisible(p.getByText('ACCESS GRANTED'), 30000);

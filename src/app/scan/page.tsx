@@ -361,8 +361,8 @@ export default function ScannerPage() {
   // ---------------- gate: session required ----------------
   if (!session) {
     return (
-      <main className="flex min-h-screen items-center justify-center">
-        <p className="text-stone-500">{checking ? 'Loading…' : 'Redirecting to usher sign-in…'}</p>
+      <main className="flex min-h-screen items-center justify-center bg-brand-navy-900">
+        <p className="text-brand-ice-200/60">{checking ? 'Loading…' : 'Redirecting to usher sign-in…'}</p>
       </main>
     );
   }
@@ -371,28 +371,38 @@ export default function ScannerPage() {
   const disabledBanner = !session.scanningEnabled;
 
   return (
-    <main className="min-h-screen bg-stone-900 text-white">
+    <main className="min-h-screen bg-brand-navy-900 text-white">
       <div className="mx-auto max-w-md px-4 py-4">
         <div className="flex items-center justify-between">
-          <div>
-            <p className="font-semibold">{session.usherName}</p>
-            <p className="text-sm text-stone-400">
-              {session.eventName} {session.gateId ? `· Gate: ${session.gateId}` : ''}
-            </p>
+          <div className="flex items-center gap-2">
+            {/* Connectivity beacon — a beaming dot beside the usher's name
+                instead of a plain "Online" text label (owner decision
+                2026-09-10). The status word is still present for screen
+                readers (and kept EXACTLY as before for automated checks —
+                "Online" / "No Internet") via sr-only text on the beacon;
+                sighted users just see the light. */}
+            <span className="relative flex h-2.5 w-2.5 shrink-0" title={online ? 'Online' : 'No Internet'}>
+              {online && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-teal-400 opacity-75" />}
+              <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${online ? 'bg-brand-teal-400' : 'bg-red-500'}`} />
+              <span className="sr-only">{online ? 'Online' : 'No Internet'}</span>
+            </span>
+            <div>
+              <p className="font-semibold">{session.usherName}</p>
+              <p className="text-sm text-brand-ice-200/60">
+                {session.eventName} {session.gateId ? `· Gate: ${session.gateId}` : ''}
+              </p>
+            </div>
           </div>
-          <button onClick={signOut} className="rounded-lg border border-stone-600 px-3 py-1.5 text-sm">
+          <button onClick={signOut} className="rounded-lg border border-white/20 px-3 py-1.5 text-sm hover:bg-white/5">
             Sign out
           </button>
         </div>
 
         <div className="mt-3 flex flex-wrap gap-2 text-xs">
-          <span className={`rounded px-2 py-1 ${online ? 'bg-stone-700' : 'bg-red-600'}`}>
-            {online ? 'Online' : 'No Internet'}
-          </span>
           <span className={`rounded px-2 py-1 ${session.scanningEnabled ? 'bg-emerald-600' : 'bg-red-600'}`}>
             {session.scanningEnabled ? 'Scanning ACTIVE' : 'EVENT NOT OPEN'}
           </span>
-          <span className="rounded bg-stone-700 px-2 py-1">Admitted: {session.acceptedCount}</span>
+          <span className="rounded bg-white/10 px-2 py-1">Admitted: {session.acceptedCount}</span>
         </div>
 
         {disabledBanner && (
@@ -420,10 +430,10 @@ export default function ScannerPage() {
             muted
             playsInline
             style={{ minHeight: '260px' }}
-            className="w-full rounded-xl bg-stone-950 object-cover"
+            className="w-full rounded-xl bg-brand-navy-950 object-cover"
           />
           {scanning && (
-            <button onClick={stopScanner} className="mt-3 w-full rounded-lg border border-stone-600 py-2 text-sm">
+            <button onClick={stopScanner} className="mt-3 w-full rounded-lg border border-white/20 py-2 text-sm hover:bg-white/5">
               Pause scanner
             </button>
           )}
@@ -440,7 +450,7 @@ export default function ScannerPage() {
             </button>
           </div>
         ) : (
-          <p role="status" data-decoder-ready={decoderReady} className="mt-2 text-center text-sm text-stone-400">
+          <p role="status" data-decoder-ready={decoderReady} className="mt-2 text-center text-sm text-brand-ice-200/60">
             {processing ? 'Processing invitation…' : decoderReady ? 'Scanner ready — point the camera at the invitation QR.' : 'Camera live — waiting for the QR decoder…'}
           </p>
         )}
@@ -449,7 +459,7 @@ export default function ScannerPage() {
             Type the serial number printed on the card — with or without the
             hyphen, any case; the server matches both stored serial shapes. */}
         <div className="mt-6 text-left">
-          <label htmlFor="manual-entry" className="text-sm text-stone-400">
+          <label htmlFor="manual-entry" className="text-sm text-brand-ice-200/60">
             Manual entry — type the serial on the card
           </label>
           <form
@@ -469,11 +479,11 @@ export default function ScannerPage() {
                 autoCorrect="off"
                 autoComplete="off"
                 spellCheck={false}
-                className="w-full rounded-lg border border-stone-600 bg-stone-800 px-3 py-2 font-mono uppercase tracking-wide text-white"
+                className="w-full rounded-lg border border-white/20 bg-white/5 px-3 py-2 font-mono uppercase tracking-wide text-white focus:border-brand-teal-400 focus:outline-none"
               />
               <button
                 type="submit"
-                className="shrink-0 rounded-lg bg-stone-700 px-5 py-2 font-semibold text-white"
+                className="shrink-0 rounded-lg bg-brand-teal-500 px-5 py-2 font-semibold text-brand-navy-950 hover:bg-brand-teal-400"
               >
                 Check
               </button>

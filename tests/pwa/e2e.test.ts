@@ -129,7 +129,7 @@ async function enterPin(p: Page, pin: string) {
   // hydration — taps on the keypad are inert until then. Tap the first
   // digit until a dot actually fills (proof the handlers are live), then
   // finish the PIN. This mirrors a real user seeing the dots respond.
-  const filledDots = p.locator('div.rounded-full.bg-stone-900');
+  const filledDots = p.locator('div.rounded-full.bg-brand-navy-900');
   for (let i = 0; i < 50 && (await filledDots.count()) === 0; i++) {
     await p.getByRole('button', { name: `Digit ${pin[0]}` }).click();
     await p.waitForTimeout(100);

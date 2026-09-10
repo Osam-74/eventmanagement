@@ -101,25 +101,21 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-brand-radial px-4 py-10">
-      {/* soft ambient glow accents — pure decoration, no interaction */}
-      <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-brand-blue-500/20 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-32 -right-16 h-80 w-80 rounded-full bg-brand-teal-500/15 blur-3xl" />
-
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-brand-blush px-4 py-10">
       <div className="relative z-10 flex w-full max-w-sm flex-col items-center">
         <div className="mb-7 flex flex-col items-center gap-3">
-          <Image src="/brand/mark.png" alt="Event Access" width={64} height={64} className="drop-shadow-[0_8px_20px_rgba(20,201,214,0.25)]" priority />
+          <Image src="/brand/mark.png" alt="Event Access" width={64} height={64} className="drop-shadow-[0_8px_20px_rgba(11,99,230,0.15)]" priority />
           <div className="text-center">
-            <p className="text-base font-semibold tracking-wide text-white">
-              EVENT<span className="text-brand-teal-400"> ACCESS</span>
+            <p className="text-base font-semibold tracking-wide text-brand-navy-900">
+              EVENT<span className="text-brand-blue-500"> ACCESS</span>
             </p>
-            <p className="text-xs uppercase tracking-[0.2em] text-brand-ice-200/60">Event management platform</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-brand-navy-700/50">Event management platform</p>
           </div>
         </div>
 
         <form
           onSubmit={signIn}
-          className="w-full rounded-2xl bg-white/95 p-8 shadow-brand ring-1 ring-black/5 backdrop-blur"
+          className="w-full rounded-2xl border border-brand-ice-200 bg-white p-8 shadow-brand"
         >
           <h1 className="mb-1 text-xl font-semibold text-brand-navy-900">Administrator sign-in</h1>
           <p className="mb-6 text-sm text-brand-navy-700/60">Sign in to manage events, guests and access.</p>
@@ -167,7 +163,7 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="mt-6 text-center text-xs text-brand-ice-200/50">© {new Date().getFullYear()} Event Access</p>
+        <p className="mt-6 text-center text-xs text-brand-navy-700/40">© {new Date().getFullYear()} Event Access</p>
       </div>
     </main>
   );

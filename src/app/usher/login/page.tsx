@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import InstallPrompt from '@/components/InstallPrompt';
 
 /**
@@ -133,7 +134,7 @@ export default function UsherLoginPage() {
   }, [press, del, confirm]);
 
   return (
-    <main className="flex min-h-screen select-none flex-col items-center justify-center px-6">
+    <main className="flex min-h-screen select-none flex-col items-center justify-center bg-brand-blush px-6">
       <style>{`
         @keyframes pin-shake {
           0%,100% { transform: translateX(0); }
@@ -157,22 +158,23 @@ export default function UsherLoginPage() {
       {/* Welcome overlay — identifies the resolved usher before the scanner. */}
       {welcome && (
         <div
-          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-stone-950"
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-brand-navy-950"
           style={{ animation: 'welcome-fade 1.4s forwards' }}
         >
-          <p className="text-sm uppercase tracking-widest text-stone-400">Welcome</p>
+          <p className="text-sm uppercase tracking-widest text-brand-ice-200/60">Welcome</p>
           <p className="mt-2 text-3xl font-semibold text-white">{welcome.name}</p>
-          <p className="mt-6 text-xs text-stone-500">Opening the scanner…</p>
+          <p className="mt-6 text-xs text-brand-ice-200/50">Opening the scanner…</p>
         </div>
       )}
 
-      <Link href="/" className="absolute left-5 top-5 text-sm text-stone-500 hover:text-stone-800">
+      <Link href="/" className="absolute left-5 top-5 text-sm text-brand-navy-700/50 hover:text-brand-navy-900">
         ← Back
       </Link>
 
-      <h1 className="mb-1 text-2xl font-semibold tracking-tight">Event Access</h1>
-      <p className="mb-1 text-xs uppercase tracking-widest text-stone-500">Usher sign-in</p>
-      <p className="mb-8 text-xs text-stone-400">Enter your PIN</p>
+      <Image src="/brand/mark.png" alt="Event Access" width={44} height={44} className="mb-3" />
+      <h1 className="mb-1 text-2xl font-semibold tracking-tight text-brand-navy-900">Event Access</h1>
+      <p className="mb-1 text-xs uppercase tracking-widest text-brand-navy-700/50">Usher sign-in</p>
+      <p className="mb-8 text-xs text-brand-navy-700/40">Enter your PIN</p>
 
       {/* PIN indicator dots */}
       <div className={`mb-10 flex gap-4 ${shaking ? 'pin-shake' : ''}`}>
@@ -186,8 +188,8 @@ export default function UsherLoginPage() {
                 err
                   ? 'bg-red-600 shadow-[0_0_0_4px_rgba(220,38,38,0.2)]'
                   : filled
-                    ? 'bg-stone-900 shadow-[0_0_0_4px_rgba(28,25,23,0.15)]'
-                    : 'bg-stone-300'
+                    ? 'bg-brand-navy-900 shadow-[0_0_0_4px_rgba(5,21,49,0.15)]'
+                    : 'bg-brand-ice-200'
               } ${verifying && filled ? 'pin-verifying' : ''}`}
             />
           );
@@ -197,9 +199,9 @@ export default function UsherLoginPage() {
       {/* Message area — lockout, disabled, offline, wrong PIN */}
       <div className="mb-6 h-10 text-center">
         {error && (
-          <p className={`text-sm font-medium ${dotError ? 'text-red-600' : 'text-stone-700'}`}>{error}</p>
+          <p className={`text-sm font-medium ${dotError ? 'text-red-600' : 'text-brand-navy-700'}`}>{error}</p>
         )}
-        {message && <p className="text-sm text-stone-500">{message}</p>}
+        {message && <p className="text-sm text-brand-navy-700/60">{message}</p>}
       </div>
 
       {/* Keypad */}
@@ -210,7 +212,7 @@ export default function UsherLoginPage() {
             type="button"
             onClick={() => press(k)}
             aria-label={`Digit ${k}`}
-            className="h-16 rounded-2xl bg-white text-2xl font-semibold text-stone-900 shadow-md active:scale-95 active:bg-stone-100"
+            className="h-16 rounded-2xl border border-brand-ice-200 bg-white text-2xl font-semibold text-brand-navy-900 shadow-sm transition active:scale-95 active:bg-brand-ice-50"
           >
             {k}
           </button>
@@ -219,7 +221,7 @@ export default function UsherLoginPage() {
           type="button"
           onClick={del}
           aria-label="Delete last digit"
-          className="h-16 rounded-2xl bg-white text-xl text-stone-500 shadow-md active:scale-95 active:bg-stone-100"
+          className="h-16 rounded-2xl border border-brand-ice-200 bg-white text-xl text-brand-navy-700/60 shadow-sm transition active:scale-95 active:bg-brand-ice-50"
         >
           ⌫
         </button>
@@ -227,7 +229,7 @@ export default function UsherLoginPage() {
           type="button"
           onClick={() => press('0')}
           aria-label="Digit 0"
-          className="h-16 rounded-2xl bg-white text-2xl font-semibold text-stone-900 shadow-md active:scale-95 active:bg-stone-100"
+          className="h-16 rounded-2xl border border-brand-ice-200 bg-white text-2xl font-semibold text-brand-navy-900 shadow-sm transition active:scale-95 active:bg-brand-ice-50"
         >
           0
         </button>
@@ -235,7 +237,7 @@ export default function UsherLoginPage() {
           type="button"
           onClick={confirm}
           aria-label="Confirm PIN"
-          className="h-16 rounded-2xl bg-stone-900 text-xl font-semibold text-white shadow-md active:scale-95 disabled:opacity-40"
+          className="h-16 rounded-2xl bg-brand-navy-900 text-xl font-semibold text-white shadow-sm transition active:scale-95 hover:bg-brand-navy-800 disabled:opacity-40"
           disabled={entry.length < PIN_LENGTH || busyRef.current}
         >
           ✓

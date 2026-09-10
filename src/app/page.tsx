@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import InstallPrompt from '@/components/InstallPrompt';
 
 /**
@@ -38,21 +39,22 @@ export default function Home() {
   }, [router]);
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4">
+    <main className="flex min-h-screen items-center justify-center bg-brand-blush px-4">
       <div className="w-full max-w-sm text-center">
-        <h1 className="mb-2 text-3xl font-semibold tracking-tight">Event Access Control</h1>
-        <p className="mb-10 text-sm text-stone-500">Please select your user type to login.</p>
+        <Image src="/brand/mark.png" alt="Event Access" width={56} height={56} className="mx-auto mb-5" priority />
+        <h1 className="mb-2 text-3xl font-semibold tracking-tight text-brand-navy-900">Event Access Control</h1>
+        <p className="mb-10 text-sm text-brand-navy-700/60">Please select your user type to login.</p>
 
         <div className="space-y-4">
           <Link
             href="/login"
-            className="block rounded-2xl border border-stone-300 bg-white px-6 py-8 text-xl font-semibold text-stone-900 shadow-lg transition hover:border-stone-500"
+            className="block rounded-2xl border border-brand-ice-200 bg-white px-6 py-8 text-xl font-semibold text-brand-navy-900 shadow-brand transition hover:border-brand-blue-400 hover:shadow-lg"
           >
             ADMIN
           </Link>
           <Link
             href="/usher/login"
-            className="block rounded-2xl bg-stone-900 px-6 py-8 text-xl font-semibold text-white shadow-lg transition hover:bg-stone-800"
+            className="block rounded-2xl bg-brand-navy-900 px-6 py-8 text-xl font-semibold text-white shadow-brand transition hover:bg-brand-navy-800"
           >
             USHER
           </Link>

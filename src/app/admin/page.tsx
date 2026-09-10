@@ -68,8 +68,10 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Event + scanning banner — lightweight summary, loads first */}
-      <div className={`rounded-2xl p-6 text-white ${ev?.scanningEnabled ? 'bg-emerald-700' : 'bg-brand-navy-900'}`}>
+      {/* Event + scanning banner — lightweight summary, loads first. Always
+          the brand navy (matches the sidebar) — status reads through the
+          ACTIVE/INACTIVE badge below, not a green/navy background swap. */}
+      <div className="rounded-2xl bg-brand-navy-900 p-6 text-white">
         {eventSummary.loading ? (
           <Skeleton rows={2} />
         ) : eventSummary.error ? (
@@ -83,7 +85,14 @@ export default function DashboardPage() {
                 <p className="text-sm uppercase tracking-wide opacity-80">
                   Scanning — {ev.name} ({ev.lifecycleStatus})
                 </p>
-                <p className="text-3xl font-bold">{ev.scanningEnabled ? 'ACTIVE' : 'INACTIVE'}</p>
+                <p className="mt-1 inline-flex items-center gap-2 text-3xl font-bold">
+                  <span
+                    className={`inline-block h-3 w-3 rounded-full ${
+                      ev.scanningEnabled ? 'bg-brand-teal-400 shadow-[0_0_0_4px_rgba(20,201,214,0.25)]' : 'bg-brand-ice-200/40'
+                    }`}
+                  />
+                  {ev.scanningEnabled ? 'ACTIVE' : 'INACTIVE'}
+                </p>
                 <p className="text-xs opacity-75">
                   {ev.eventDate ? new Date(ev.eventDate).toLocaleDateString() : ''} · last change {fmt(ev.scanningEnabledAt)}
                 </p>
@@ -97,9 +106,9 @@ export default function DashboardPage() {
                 ['Revoked', ev.totals.revoked],
                 ['Rescans allowed', ev.totals.rescansAllowed],
               ].map(([label, value]) => (
-                <div key={String(label)} className="rounded-xl bg-black/20 p-3">
-                  <p className="text-xs opacity-80">{label}</p>
-                  <p className="mt-1 text-xl font-semibold">{value}</p>
+                <div key={String(label)} className="rounded-xl bg-white/10 p-3 ring-1 ring-white/10">
+                  <p className="text-xs text-brand-ice-200/80">{label}</p>
+                  <p className="mt-1 text-xl font-semibold text-white">{value}</p>
                 </div>
               ))}
             </div>

@@ -27,7 +27,7 @@ const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : '—
 
 const STATUS_STYLE: Record<string, string> = {
   unused: 'bg-emerald-100 text-emerald-800',
-  used: 'bg-stone-200 text-stone-700',
+  used: 'bg-brand-ice-100 text-brand-navy-700',
   revoked: 'bg-red-100 text-red-700',
 };
 
@@ -119,13 +119,13 @@ export default function InvitationsPage() {
     if (r?.url) window.open(r.url, '_blank');
   }
 
-  if (!eventId) return <p className="text-stone-500">Select an event first.</p>;
+  if (!eventId) return <p className="text-brand-navy-700/60">Select an event first.</p>;
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl bg-white p-4 shadow-sm">
-        <h2 className="mb-1 font-semibold">Invitations — trace &amp; manage</h2>
-        <p className="mb-3 text-sm text-stone-500">
+      <div className="rounded-xl border border-brand-ice-200 bg-white p-4 shadow-sm">
+        <h2 className="mb-1 font-semibold text-brand-navy-900">Invitations — trace &amp; manage</h2>
+        <p className="mb-3 text-sm text-brand-navy-700/60">
           Search by the serial number printed on the card (e.g. <code>ISWED-00042</code>) or paste a scanned QR
           credential. You&apos;ll see its status, who scanned it and when — and you can release it for a rescan
           (e.g. after a network failure at the gate).
@@ -135,49 +135,56 @@ export default function InvitationsPage() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Serial number or scanned QR code…"
-            className="min-w-[260px] flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm"
+            className="min-w-[260px] flex-1 rounded-lg border border-brand-ice-200 bg-brand-ice-50 px-3 py-2 text-sm text-brand-navy-900 outline-none focus:border-brand-blue-500 focus:bg-white focus:ring-2 focus:ring-brand-blue-500/20"
           />
-          <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-lg border border-stone-300 px-3 py-2 text-sm">
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            className="rounded-lg border border-brand-ice-200 bg-brand-ice-50 px-3 py-2 text-sm text-brand-navy-900 outline-none focus:border-brand-blue-500"
+          >
             <option value="">All statuses</option>
             <option value="unused">Unused</option>
             <option value="used">Used</option>
             <option value="revoked">Revoked</option>
           </select>
-          <button onClick={() => load(0)} className="rounded-lg bg-stone-900 px-4 py-2 text-sm text-white">
+          <button onClick={() => load(0)} className="rounded-lg bg-brand-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-blue-600">
             Search
           </button>
         </div>
-        {msg && <p className="mt-2 text-sm text-stone-700">{msg}</p>}
+        {msg && <p className="mt-2 text-sm text-brand-navy-700">{msg}</p>}
       </div>
 
-      <div className="rounded-xl bg-white p-4 shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-brand-ice-200 bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b text-left text-xs uppercase text-stone-400">
-              <th className="py-2">Serial</th>
-              <th className="py-2">Status</th>
-              <th className="py-2">Scanned by</th>
-              <th className="py-2">Scanned at</th>
-              <th className="py-2 text-right">Actions</th>
+            <tr className="border-b border-brand-ice-200 bg-brand-ice-50 text-left text-xs font-semibold uppercase tracking-wide text-brand-navy-700/50">
+              <th className="px-4 py-3">Serial</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Scanned by</th>
+              <th className="px-4 py-3">Scanned at</th>
+              <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {items.map((inv) => (
               <Fragment key={inv.id}>
-                <tr className="border-t border-stone-100">
-                  <td className="py-2 font-mono font-medium">{inv.serialNumber}</td>
-                  <td className="py-2">
-                    <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[inv.status]}`}>{inv.status}</span>
+                <tr className="border-t border-brand-ice-100 transition hover:bg-brand-ice-50/60">
+                  <td className="px-4 py-2.5 font-mono font-medium text-brand-navy-900">{inv.serialNumber}</td>
+                  <td className="px-4 py-2.5">
+                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[inv.status]}`}>{inv.status}</span>
                   </td>
-                  <td className="py-2">{inv.status === 'used' ? (inv.usedByUsherName ?? '—') : '—'}</td>
-                  <td className="py-2 text-stone-500">{inv.status === 'used' ? fmt(inv.usedAt) : '—'}</td>
-                  <td className="py-2 text-right">
-                    <div className="flex justify-end gap-1">
-                      <button onClick={() => setExpanded(expanded === inv.id ? null : inv.id)} className="rounded border border-stone-300 px-2 py-1 text-xs">
+                  <td className="px-4 py-2.5 text-brand-navy-800">{inv.status === 'used' ? (inv.usedByUsherName ?? '—') : '—'}</td>
+                  <td className="px-4 py-2.5 text-brand-navy-700/60">{inv.status === 'used' ? fmt(inv.usedAt) : '—'}</td>
+                  <td className="px-4 py-2.5 text-right">
+                    <div className="flex justify-end gap-1.5">
+                      <button
+                        onClick={() => setExpanded(expanded === inv.id ? null : inv.id)}
+                        className="rounded-md border border-brand-ice-200 px-2 py-1 text-xs text-brand-navy-700 hover:bg-brand-ice-50"
+                      >
                         History
                       </button>
                       {inv.status === 'unused' && can('canManageInvites') && (
-                        <button onClick={() => revoke(inv)} className="rounded border border-red-300 px-2 py-1 text-xs text-red-700">
+                        <button onClick={() => revoke(inv)} className="rounded-md border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50">
                           Revoke
                         </button>
                       )}
@@ -186,32 +193,32 @@ export default function InvitationsPage() {
                           onClick={() => regenerate(inv)}
                           disabled={regeneratingId === inv.id}
                           title="Fixes a broken render (e.g. missing serial) by issuing a fresh QR + image. Only for cards not yet handed to a guest."
-                          className="rounded border border-stone-300 px-2 py-1 text-xs disabled:opacity-50"
+                          className="rounded-md border border-brand-ice-200 px-2 py-1 text-xs text-brand-navy-700 hover:bg-brand-ice-50 disabled:opacity-50"
                         >
                           {regeneratingId === inv.id ? 'Regenerating…' : 'Regenerate image'}
                         </button>
                       )}
                       {inv.status === 'used' && can('canManageInvites') && (
-                        <button onClick={() => setRescanFor(inv)} className="rounded bg-amber-500 px-2 py-1 text-xs font-medium text-white">
+                        <button onClick={() => setRescanFor(inv)} className="rounded-md bg-amber-500 px-2 py-1 text-xs font-medium text-white hover:bg-amber-600">
                           Allow rescan
                         </button>
                       )}
-                      <button onClick={() => downloadCard(inv)} className="rounded border border-stone-300 px-2 py-1 text-xs">
+                      <button onClick={() => downloadCard(inv)} className="rounded-md border border-brand-ice-200 px-2 py-1 text-xs text-brand-navy-700 hover:bg-brand-ice-50">
                         Card
                       </button>
                     </div>
                   </td>
                 </tr>
                 {expanded === inv.id && (
-                  <tr className="bg-stone-50">
-                    <td colSpan={5} className="py-3 text-xs text-stone-600">
+                  <tr className="bg-brand-ice-50/70">
+                    <td colSpan={5} className="px-4 py-3 text-xs text-brand-navy-700/80">
                       <p>Generated: {fmt(inv.generatedAt)} · Profile: {inv.outputProfile}</p>
                       {inv.status === 'revoked' && <p className="text-red-600">Revoked: {fmt(inv.revokedAt)} — {inv.revocationReason}</p>}
                       {inv.supersededByInvitationId && (
-                        <p className="text-stone-500">Replaced by a regenerated card (id {inv.supersededByInvitationId}) — that one is the live credential now.</p>
+                        <p className="text-brand-navy-700/60">Replaced by a regenerated card (id {inv.supersededByInvitationId}) — that one is the live credential now.</p>
                       )}
                       {inv.supersedesInvitationId && (
-                        <p className="text-stone-500">Regenerated to fix a broken render on a previous card (id {inv.supersedesInvitationId}).</p>
+                        <p className="text-brand-navy-700/60">Regenerated to fix a broken render on a previous card (id {inv.supersedesInvitationId}).</p>
                       )}
                       {inv.rescanHistory.map((h, i) => (
                         <p key={i} className="text-amber-700">
@@ -229,17 +236,25 @@ export default function InvitationsPage() {
               </Fragment>
             ))}
             {items.length === 0 && (
-              <tr><td colSpan={5} className="py-4 text-stone-500">No invitations found for this search.</td></tr>
+              <tr><td colSpan={5} className="px-4 py-6 text-center text-brand-navy-700/50">No invitations found for this search.</td></tr>
             )}
           </tbody>
         </table>
         {!q && (
-          <div className="mt-3 flex items-center gap-2 text-sm text-stone-500">
-            <button disabled={skip === 0} onClick={() => load(Math.max(skip - 50, 0))} className="rounded border border-stone-300 px-3 py-1 disabled:opacity-40">
+          <div className="flex items-center gap-2 border-t border-brand-ice-200 px-4 py-3 text-sm text-brand-navy-700/60">
+            <button
+              disabled={skip === 0}
+              onClick={() => load(Math.max(skip - 50, 0))}
+              className="rounded-md border border-brand-ice-200 px-3 py-1 hover:bg-brand-ice-50 disabled:opacity-40"
+            >
               Previous
             </button>
             <span>{skip}–{skip + items.length} of {total}</span>
-            <button disabled={skip + 50 >= total} onClick={() => load(skip + 50)} className="rounded border border-stone-300 px-3 py-1 disabled:opacity-40">
+            <button
+              disabled={skip + 50 >= total}
+              onClick={() => load(skip + 50)}
+              className="rounded-md border border-brand-ice-200 px-3 py-1 hover:bg-brand-ice-50 disabled:opacity-40"
+            >
               Next
             </button>
           </div>
@@ -247,10 +262,10 @@ export default function InvitationsPage() {
       </div>
 
       {rescanFor && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-            <h3 className="text-lg font-semibold">Allow rescan for {rescanFor.serialNumber}</h3>
-            <p className="mt-1 text-sm text-stone-600">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-navy-950/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-brand">
+            <h3 className="text-lg font-semibold text-brand-navy-900">Allow rescan for {rescanFor.serialNumber}</h3>
+            <p className="mt-1 text-sm text-brand-navy-700/70">
               Scanned by <strong>{rescanFor.usedByUsherName}</strong> at {fmt(rescanFor.usedAt)}.
               Releasing it will make this invitation valid again at the gate. This action is logged.
             </p>
@@ -258,16 +273,16 @@ export default function InvitationsPage() {
               value={rescanReason}
               onChange={(e) => setRescanReason(e.target.value)}
               placeholder="Reason (required) — e.g. network failure at gate, scanner response lost"
-              className="mt-3 h-24 w-full rounded-lg border border-stone-300 p-3 text-sm"
+              className="mt-3 h-24 w-full rounded-lg border border-brand-ice-200 bg-brand-ice-50 p-3 text-sm text-brand-navy-900 outline-none focus:border-brand-blue-500 focus:bg-white"
             />
             <div className="mt-4 flex justify-end gap-2">
-              <button onClick={() => setRescanFor(null)} className="rounded-lg border border-stone-300 px-4 py-2 text-sm">
+              <button onClick={() => setRescanFor(null)} className="rounded-lg border border-brand-ice-200 px-4 py-2 text-sm text-brand-navy-700 hover:bg-brand-ice-50">
                 Cancel
               </button>
               <button
                 onClick={allowRescan}
                 disabled={rescanReason.trim().length < 3}
-                className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-50"
               >
                 Release for rescan
               </button>

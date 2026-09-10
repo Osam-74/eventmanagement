@@ -37,6 +37,12 @@ export default {
       },
       backgroundImage: {
         'brand-radial': 'radial-gradient(120% 120% at 50% -10%, #123166 0%, #051531 55%, #030c22 100%)',
+        // White-first background with a moderate "blush" of the brand blue
+        // and teal in opposite corners — used on the picker, admin login and
+        // usher PIN screens (owner decision 2026-09-10: white is the main
+        // colour there, the navy radial is reserved for the admin sidebar).
+        'brand-blush':
+          'radial-gradient(85% 60% at 8% -8%, rgba(11,99,230,0.10) 0%, rgba(11,99,230,0) 60%), radial-gradient(85% 60% at 96% 108%, rgba(20,201,214,0.12) 0%, rgba(20,201,214,0) 60%), #ffffff',
       },
     },
   },

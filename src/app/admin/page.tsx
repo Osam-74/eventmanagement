@@ -19,6 +19,13 @@ type Batches = {
 
 const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : '—');
 
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
 function Skeleton({ rows = 3 }: { rows?: number }) {
   return (
     <div className="animate-pulse space-y-2" aria-label="Loading">
@@ -42,11 +49,115 @@ function ErrorCard({ message, onRetry }: { message: string; onRetry: () => void 
 
 const card = 'rounded-xl border border-brand-ice-200 bg-white p-4 shadow-sm';
 
+/** Small monochrome line icons — restrained on purpose: one accent color, no per-card rainbow. */
+function Icon({ name }: { name: 'ticket' | 'clock' | 'check' | 'x' | 'refresh' }) {
+  const common = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+  switch (name) {
+    case 'ticket':
+      return (
+        <svg {...common}>
+          <path d="M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4V8Z" />
+          <path d="M13 6v12" strokeDasharray="2 2" />
+        </svg>
+      );
+    case 'clock':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7v5l3 3" />
+        </svg>
+      );
+    case 'check':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="9" />
+          <path d="m8.5 12.5 2.5 2.5 5-5" />
+        </svg>
+      );
+    case 'x':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="9" />
+          <path d="m9.5 9.5 5 5m0-5-5 5" />
+        </svg>
+      );
+    case 'refresh':
+      return (
+        <svg {...common}>
+          <path d="M20 11a8 8 0 0 0-14.6-4.4M4 13a8 8 0 0 0 14.6 4.4" />
+          <path d="M4 4v5h5M20 20v-5h-5" />
+        </svg>
+      );
+  }
+}
+
+/** Mini progress ring — used, out of total, drawn with a single accent stroke. */
+function ProgressRing({ value, total }: { value: number; total: number }) {
+  const pct = total > 0 ? Math.min(1, value / total) : 0;
+  const r = 15;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg width="40" height="40" viewBox="0 0 40 40" className="shrink-0 -rotate-90">
+      <circle cx="20" cy="20" r={r} fill="none" stroke="currentColor" strokeWidth="4" className="text-brand-ice-200" />
+      <circle
+        cx="20"
+        cy="20"
+        r={r}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="4"
+        strokeLinecap="round"
+        className="text-brand-blue-500"
+        strokeDasharray={`${c * pct} ${c}`}
+      />
+    </svg>
+  );
+}
+
+function KpiCard({
+  label,
+  value,
+  icon,
+  ring,
+}: {
+  label: string;
+  value: number;
+  icon: 'ticket' | 'clock' | 'check' | 'x' | 'refresh';
+  ring?: { value: number; total: number };
+}) {
+  return (
+    <div className="rounded-xl border border-brand-ice-200 bg-white p-4 shadow-sm">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium uppercase tracking-wide text-brand-navy-700/50">{label}</p>
+        {ring ? <ProgressRing value={ring.value} total={ring.total} /> : <span className="text-brand-navy-700/35"><Icon name={icon} /></span>}
+      </div>
+      <p className="mt-2 text-2xl font-semibold text-brand-navy-900">{value}</p>
+      {ring && <p className="text-xs text-brand-navy-700/45">of {ring.total} generated</p>}
+    </div>
+  );
+}
+
+const SCAN_BADGES: Record<string, { label: string; cls: string }> = {
+  accepted: { label: 'Valid', cls: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20' },
+  already_used: { label: 'Already used', cls: 'bg-amber-50 text-amber-700 ring-amber-600/20' },
+  revoked: { label: 'Revoked', cls: 'bg-red-50 text-red-700 ring-red-600/20' },
+  invalid: { label: 'Invalid', cls: 'bg-red-50 text-red-700 ring-red-600/20' },
+  wrong_event: { label: 'Wrong event', cls: 'bg-red-50 text-red-700 ring-red-600/20' },
+  scanning_disabled: { label: 'Scanning off', cls: 'bg-brand-ice-100 text-brand-navy-700/60 ring-brand-ice-200' },
+  event_closed: { label: 'Event closed', cls: 'bg-brand-ice-100 text-brand-navy-700/60 ring-brand-ice-200' },
+};
+
+function ScanBadge({ result }: { result: string }) {
+  const b = SCAN_BADGES[result] ?? { label: 'Denied', cls: 'bg-red-50 text-red-700 ring-red-600/20' };
+  return <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${b.cls}`}>{b.label}</span>;
+}
+
 export default function DashboardPage() {
   const { eventId } = useSelectedEvent();
-  // The Activate/Deactivate control lives in the header now (top right, on
-  // every admin page) — this page just reads the SAME shared summary to
-  // render the read-only status banner, no separate fetch of its own.
+  // The Activate/Deactivate control and the event's name/live status now
+  // live in the header (breadcrumb + pill, on every admin page) — this page
+  // no longer repeats them in a big banner, it just renders the metrics and
+  // widgets underneath (owner revamp, 2026-09-10).
   const eventSummary = useEventSummary();
 
   const activityWidget = useAdminWidget<Activity>(
@@ -68,53 +179,21 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Event + scanning banner — lightweight summary, loads first. Always
-          the brand navy (matches the sidebar) — status reads through the
-          ACTIVE/INACTIVE badge below, not a green/navy background swap. */}
-      <div className="rounded-2xl bg-brand-navy-900 p-6 text-white">
-        {eventSummary.loading ? (
-          <Skeleton rows={2} />
-        ) : eventSummary.error ? (
-          <ErrorCard message={eventSummary.error} onRetry={eventSummary.retry} />
-        ) : !ev ? (
-          <p className="text-sm">Event not found. It may have been removed.</p>
-        ) : (
-          <>
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex-1">
-                <p className="text-sm uppercase tracking-wide opacity-80">
-                  Scanning — {ev.name} ({ev.lifecycleStatus})
-                </p>
-                <p className="mt-1 inline-flex items-center gap-2 text-3xl font-bold">
-                  <span
-                    className={`inline-block h-3 w-3 rounded-full ${
-                      ev.scanningEnabled ? 'bg-brand-teal-400 shadow-[0_0_0_4px_rgba(20,201,214,0.25)]' : 'bg-brand-ice-200/40'
-                    }`}
-                  />
-                  {ev.scanningEnabled ? 'ACTIVE' : 'INACTIVE'}
-                </p>
-                <p className="text-xs opacity-75">
-                  {ev.eventDate ? new Date(ev.eventDate).toLocaleDateString() : ''} · last change {fmt(ev.scanningEnabledAt)}
-                </p>
-              </div>
-            </div>
-            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
-              {[
-                ['Generated', ev.totals.generated],
-                ['Unused', ev.totals.unused],
-                ['Admitted', ev.totals.used],
-                ['Revoked', ev.totals.revoked],
-                ['Rescans allowed', ev.totals.rescansAllowed],
-              ].map(([label, value]) => (
-                <div key={String(label)} className="rounded-xl bg-white/10 p-3 ring-1 ring-white/10">
-                  <p className="text-xs text-brand-ice-200/80">{label}</p>
-                  <p className="mt-1 text-xl font-semibold text-white">{value}</p>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
+      {eventSummary.loading ? (
+        <div className={card}><Skeleton rows={2} /></div>
+      ) : eventSummary.error ? (
+        <div className={card}><ErrorCard message={eventSummary.error} onRetry={eventSummary.retry} /></div>
+      ) : !ev ? (
+        <div className={card}><p className="text-sm text-brand-navy-700/60">Event not found. It may have been removed.</p></div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          <KpiCard label="Generated" value={ev.totals.generated} icon="ticket" />
+          <KpiCard label="Unused" value={ev.totals.unused} icon="clock" />
+          <KpiCard label="Admitted" value={ev.totals.used} icon="check" ring={{ value: ev.totals.used, total: ev.totals.generated }} />
+          <KpiCard label="Revoked" value={ev.totals.revoked} icon="x" />
+          <KpiCard label="Rescans allowed" value={ev.totals.rescansAllowed} icon="refresh" />
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Usher roster — independent widget */}
@@ -127,27 +206,34 @@ export default function DashboardPage() {
           ) : ushersWidget.data && ushersWidget.data.ushers.length === 0 ? (
             <p className="text-sm text-brand-navy-700/60">No ushers created yet.</p>
           ) : (
-            <table className="w-full text-sm">
-              <tbody>
-                {ushersWidget.data?.ushers.map((u) => (
-                  <tr key={u.id} className="border-t border-brand-ice-100">
-                    <td className="py-1.5">
-                      <span className={`mr-2 inline-block h-2 w-2 rounded-full ${u.activeNow ? 'bg-emerald-500' : 'bg-brand-ice-200'}`} />
-                      {u.name} {u.gateId && <span className="text-brand-navy-700/40">({u.gateId})</span>}
-                      {!u.active && <span className="ml-1 text-red-500">disabled</span>}
-                      {u.lockedUntil && <span className="ml-1 text-amber-600">locked</span>}
-                    </td>
-                    <td className="py-1.5 text-right text-brand-navy-700/60">
-                      ✓ {u.acceptedCount} · last seen {fmt(u.lastSeenAt)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <ul className="divide-y divide-brand-ice-100">
+              {ushersWidget.data?.ushers.map((u) => (
+                <li key={u.id} className="flex items-center gap-3 py-2">
+                  <span className="relative shrink-0">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-blue-500/10 text-xs font-semibold text-brand-blue-600">
+                      {initials(u.name)}
+                    </span>
+                    <span
+                      className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-white ${u.activeNow ? 'bg-emerald-500' : 'bg-brand-ice-200'}`}
+                    />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-brand-navy-900">
+                      {u.name} {u.gateId && <span className="font-normal text-brand-navy-700/40">({u.gateId})</span>}
+                    </p>
+                    <p className="text-xs text-brand-navy-700/50">
+                      {u.acceptedCount} admitted · last seen {fmt(u.lastSeenAt)}
+                      {!u.active && <span className="ml-1.5 text-red-500">· disabled</span>}
+                      {u.lockedUntil && <span className="ml-1.5 text-amber-600">· locked</span>}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
 
-        {/* Recent scan activity — independent widget */}
+        {/* Recent scan activity — independent widget, proper data table */}
         <div className={card}>
           <h2 className="mb-3 font-semibold">Recent scans</h2>
           {activityWidget.loading ? (
@@ -162,24 +248,25 @@ export default function DashboardPage() {
               </div>
               <div className="max-h-72 overflow-y-auto">
                 <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs uppercase tracking-wide text-brand-navy-700/40">
+                      <th className="py-1.5 font-medium">Ticket</th>
+                      <th className="py-1.5 font-medium">Usher</th>
+                      <th className="py-1.5 font-medium">Status</th>
+                      <th className="py-1.5 text-right font-medium">Time</th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {activityWidget.data?.recentScans.map((s) => (
                       <tr key={s.id} className="border-t border-brand-ice-100">
-                        <td className="py-1.5">
-                          <span
-                            className={`mr-2 font-medium ${
-                              s.result === 'accepted' ? 'text-emerald-600' : 'text-red-600'
-                            }`}
-                          >
-                            {s.result === 'accepted' ? '✓' : '✗'}
-                          </span>
-                          {s.serialNumber ?? 'unknown card'} · {s.usherName ?? ''}
-                        </td>
-                        <td className="py-1.5 text-right text-brand-navy-700/60">{fmt(s.scannedAt)}</td>
+                        <td className="py-1.5 font-semibold text-brand-navy-900">{s.serialNumber ?? '—'}</td>
+                        <td className="py-1.5 text-brand-navy-700/55">{s.usherName ?? '—'}</td>
+                        <td className="py-1.5"><ScanBadge result={s.result} /></td>
+                        <td className="py-1.5 text-right text-brand-navy-700/50">{fmt(s.scannedAt)}</td>
                       </tr>
                     ))}
                     {activityWidget.data?.recentScans.length === 0 && (
-                      <tr><td className="text-brand-navy-700/60">No scans yet.</td></tr>
+                      <tr><td colSpan={4} className="py-3 text-brand-navy-700/60">No scans yet.</td></tr>
                     )}
                   </tbody>
                 </table>

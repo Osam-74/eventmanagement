@@ -219,18 +219,45 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     </svg>
                   </button>
                   <h2 className="text-sm font-semibold text-brand-navy-900 md:hidden">{currentLabel}</h2>
-                  <select
-                    value={selected}
-                    onChange={(e) => selectEvent(e.target.value)}
-                    className="rounded-lg border border-brand-ice-200 bg-brand-ice-50 px-3 py-1.5 text-sm text-brand-navy-900 outline-none focus:border-brand-blue-500"
-                  >
-                    <option value="">Select event…</option>
-                    {events.map((e) => (
-                      <option key={e.id} value={e.id}>
-                        {e.name}
-                      </option>
-                    ))}
-                  </select>
+
+                  {/* Breadcrumb + event switcher, merged: the event name IS the
+                      context anchor now — no separate dark banner repeats it
+                      lower on the page (owner revamp, 2026-09-10). */}
+                  <div className="flex min-w-0 items-center gap-2 text-sm">
+                    <Link href="/admin/events" className="shrink-0 text-brand-navy-700/40 transition hover:text-brand-navy-700">
+                      Events
+                    </Link>
+                    <span className="shrink-0 text-brand-navy-700/25">/</span>
+                    <select
+                      value={selected}
+                      onChange={(e) => selectEvent(e.target.value)}
+                      aria-label="Switch event"
+                      className="min-w-0 max-w-[40vw] truncate rounded-md border-0 bg-transparent py-1 text-sm font-semibold text-brand-navy-900 outline-none focus:ring-2 focus:ring-brand-blue-500/30 sm:max-w-xs"
+                    >
+                      <option value="">Select event…</option>
+                      {events.map((e) => (
+                        <option key={e.id} value={e.id}>
+                          {e.name}
+                        </option>
+                      ))}
+                    </select>
+                    {ev && (
+                      <span
+                        className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
+                          ev.scanningEnabled
+                            ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20'
+                            : 'bg-brand-ice-100 text-brand-navy-700/55 ring-1 ring-brand-ice-200'
+                        }`}
+                      >
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full ${
+                            ev.scanningEnabled ? 'bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.25)]' : 'bg-brand-navy-700/25'
+                          }`}
+                        />
+                        {ev.scanningEnabled ? 'Live' : 'Inactive'}
+                      </span>
+                    )}
+                  </div>
 
                   {/* Activate/Deactivate scanning — top right of the header, on every admin page */}
                   {canToggleScanning && ev && (

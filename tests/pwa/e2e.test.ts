@@ -324,7 +324,10 @@ describe('dashboard: progressive load, no duplicate session checks, no permissio
       await p.waitForURL(`${BASE}/admin`, { timeout: 20000 });
 
       // The four widget panels all populate (each via its own request).
-      await expectVisible(p.getByText('Scanning —', { exact: false }), 20000);
+      // Event context now lives in the header breadcrumb + Live/Inactive
+      // pill (owner dashboard revamp, 2026-09-10) instead of a page banner —
+      // same assertion intent: the selected event's live summary loaded.
+      await expectVisible(p.getByText(/^(Live|Inactive)$/), 20000);
       await expectVisible(p.getByRole('heading', { name: 'Ushers' }), 20000);
       await expectVisible(p.getByRole('heading', { name: 'Recent scans' }), 20000);
       await expectVisible(p.getByRole('heading', { name: 'Latest batches' }), 20000);

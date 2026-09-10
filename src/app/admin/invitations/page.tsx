@@ -15,6 +15,8 @@ type Invitation = {
   gateId: string | null;
   revokedAt: string | null;
   revocationReason: string | null;
+  supersededByInvitationId: string | null;
+  supersedesInvitationId: string | null;
   rescanAllowedAt: string | null;
   rescanAllowedBy: string | null;
   rescanHistory: { at: string | null; allowedByName: string; reason: string }[];
@@ -41,6 +43,7 @@ export default function InvitationsPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [rescanFor, setRescanFor] = useState<Invitation | null>(null);
   const [rescanReason, setRescanReason] = useState('');
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
 
   const load = useCallback(
     async (offset = 0) => {
@@ -70,6 +73,28 @@ export default function InvitationsPage() {
     });
     setMsg(`Revoked ${inv.serialNumber}.`);
     load(skip);
+  }
+
+  async function regenerate(inv: Invitation) {
+    if (
+      !confirm(
+        `Regenerate the image for ${inv.serialNumber}? This issues a FRESH QR (the old one — likely already printed with a rendering bug — is revoked and can no longer be admitted). Only do this for cards not yet handed to a guest.`
+      )
+    )
+      return;
+    setRegeneratingId(inv.id);
+    const r = await adminJson<{ ok: boolean; message?: string; newInvitationId?: string; imageUrl?: string }>(
+      `/api/admin/invitations/${inv.id}/regenerate`,
+      { method: 'POST', body: JSON.stringify({ reason: 'Regenerated from admin console — fixed rendering' }) }
+    ).catch(() => null);
+    setRegeneratingId(null);
+    if (r?.ok) {
+      setMsg(`Regenerated ${inv.serialNumber} — new card ready. Opening it now.`);
+      if (r.imageUrl) window.open(r.imageUrl, '_blank');
+      load(skip);
+    } else {
+      setMsg(r?.message ?? 'Could not regenerate this invitation.');
+    }
   }
 
   async function allowRescan() {
@@ -156,6 +181,16 @@ export default function InvitationsPage() {
                           Revoke
                         </button>
                       )}
+                      {inv.status === 'unused' && can('canGenerateInvites') && (
+                        <button
+                          onClick={() => regenerate(inv)}
+                          disabled={regeneratingId === inv.id}
+                          title="Fixes a broken render (e.g. missing serial) by issuing a fresh QR + image. Only for cards not yet handed to a guest."
+                          className="rounded border border-stone-300 px-2 py-1 text-xs disabled:opacity-50"
+                        >
+                          {regeneratingId === inv.id ? 'Regenerating…' : 'Regenerate image'}
+                        </button>
+                      )}
                       {inv.status === 'used' && can('canManageInvites') && (
                         <button onClick={() => setRescanFor(inv)} className="rounded bg-amber-500 px-2 py-1 text-xs font-medium text-white">
                           Allow rescan
@@ -172,6 +207,12 @@ export default function InvitationsPage() {
                     <td colSpan={5} className="py-3 text-xs text-stone-600">
                       <p>Generated: {fmt(inv.generatedAt)} · Profile: {inv.outputProfile}</p>
                       {inv.status === 'revoked' && <p className="text-red-600">Revoked: {fmt(inv.revokedAt)} — {inv.revocationReason}</p>}
+                      {inv.supersededByInvitationId && (
+                        <p className="text-stone-500">Replaced by a regenerated card (id {inv.supersededByInvitationId}) — that one is the live credential now.</p>
+                      )}
+                      {inv.supersedesInvitationId && (
+                        <p className="text-stone-500">Regenerated to fix a broken render on a previous card (id {inv.supersedesInvitationId}).</p>
+                      )}
                       {inv.rescanHistory.map((h, i) => (
                         <p key={i} className="text-amber-700">
                           Rescan allowed: {fmt(h.at)} by {h.allowedByName} — {h.reason}

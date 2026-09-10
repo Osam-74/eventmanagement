@@ -30,6 +30,8 @@ function toDTO(id: string, data: Record<string, unknown>): InvitationDTO {
     revokedAt: iso(data.revokedAt),
     revokedBy: data.revokedBy ?? null,
     revocationReason: data.revocationReason ?? null,
+    supersededByInvitationId: data.supersededByInvitationId ?? null,
+    supersedesInvitationId: data.supersedesInvitationId ?? null,
     rescanAllowedAt: iso(data.rescanAllowedAt),
     rescanAllowedBy: data.rescanAllowedBy ?? null,
     rescanHistory: (data.rescanHistory as unknown[] | undefined)?.map((h) => {

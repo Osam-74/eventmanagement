@@ -88,6 +88,10 @@ export const revokeInvitationSchema = z.object({
   reason: z.string().max(300).default(''),
 });
 
+export const regenerateInvitationSchema = z.object({
+  reason: z.string().max(300).default('Regenerated — rendering fix'),
+});
+
 export const allowRescanSchema = z.object({
   reason: z.string().min(3).max(300),
 });

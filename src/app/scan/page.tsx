@@ -51,11 +51,20 @@ export default function ScannerPage() {
   const [result, setResult] = useState<ScanResult | null>(null);
   const [online, setOnline] = useState(true);
   const [cameraError, setCameraError] = useState('');
+  const [stalled, setStalled] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const scannerRef = useRef<QrScanner | null>(null);
   const busyRef = useRef(false);
   const lastTokenRef = useRef<{ token: string; at: number }>({ token: '', at: 0 });
+  // Proof-of-life for the decode loop, NOT just camera permission: every
+  // processed frame (found or not) bumps this. A watchdog below compares it
+  // against "now" — if frames stop landing this catches the exact bug we
+  // were chasing (video visibly live, decode engine silently dead/never
+  // initialized) instead of leaving the UI stuck showing "scanning" forever.
+  const lastFrameAtRef = useRef<number>(0);
+  const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const restartingRef = useRef(false);
 
   useEffect(() => {
     const on = () => setOnline(true);
@@ -115,6 +124,7 @@ export default function ScannerPage() {
 
   useEffect(() => {
     return () => {
+      stopWatchdog();
       scannerRef.current?.destroy();
       scannerRef.current = null;
     };
@@ -122,6 +132,7 @@ export default function ScannerPage() {
 
   async function signOut() {
     await fetch('/api/usher/signout', { method: 'POST' }).catch(() => undefined);
+    stopWatchdog();
     scannerRef.current?.stop();
     setSession(null);
     setScanning(false);
@@ -182,39 +193,77 @@ export default function ScannerPage() {
     }
   }
 
-  async function startScanner() {
+  function stopWatchdog() {
+    if (watchdogRef.current) {
+      clearInterval(watchdogRef.current);
+      watchdogRef.current = null;
+    }
+  }
+
+  // Starts (or restarts) the decode engine and arms a watchdog that proves
+  // frames are actually being PROCESSED, not just that the camera opened.
+  // This is the real fix for "camera looks live but nothing ever scans":
+  // that symptom means getUserMedia succeeded (video renders) while the
+  // decode loop never produced a single callback — previously invisible,
+  // now caught and auto-recovered within a few seconds.
+  async function startScanner(isRestart = false) {
     setStarting(true);
-    setCameraError('');
+    if (!isRestart) setCameraError('');
+    setStalled(false);
     try {
       const { default: QrScannerCtor } = await import('qr-scanner');
-      // The camera-shows-but-never-decodes symptom we chased with the old
-      // library traced back to the native BarcodeDetector path silently
-      // detecting nothing on some Android builds. qr-scanner uses
-      // BarcodeDetector when present too — force it off so every device
-      // runs the same battle-tested WASM/worker decoder, on a dedicated
-      // thread (this is also what makes it feel genuinely "live": decoding
-      // never blocks the main thread/UI the way the old canvas-based
-      // decode loop could).
-      (QrScannerCtor as unknown as { _disableBarcodeDetector: boolean })._disableBarcodeDetector = true;
 
       const video = videoRef.current;
       if (!video) throw new Error('Video element not mounted');
 
+      // Any previous instance must be fully torn down before creating a new
+      // one — two QrScanner instances racing over the same <video> element
+      // is exactly the kind of state that LOOKS live but never resolves.
+      scannerRef.current?.destroy();
+      scannerRef.current = null;
+
+      lastFrameAtRef.current = Date.now();
       const scanner = new QrScannerCtor(
         video,
-        (result) => submitToken(result.data),
+        (result) => {
+          lastFrameAtRef.current = Date.now();
+          submitToken(result.data);
+        },
         {
-          onDecodeError: () => undefined, // fires every frame with no code — expected noise
+          // Fires on EVERY processed frame that found no code — this is our
+          // proof-of-life signal, not noise to discard.
+          onDecodeError: () => {
+            lastFrameAtRef.current = Date.now();
+          },
           highlightScanRegion: true,
           highlightCodeOutline: true,
-          maxScansPerSecond: 12,
+          maxScansPerSecond: 15,
           preferredCamera: 'environment',
+          returnDetailedScanResult: true,
         }
       );
       scannerRef.current = scanner;
       await scanner.start();
+      // Forces the internal decode-engine promise to be awaited right now
+      // (hasFlash() reads it) so a broken engine (e.g. worker init failure)
+      // throws HERE, as a visible camera error, instead of hanging silently
+      // forever inside the per-frame decode loop.
+      await scanner.hasFlash().catch(() => undefined);
+
       setScanning(true);
       setResult(null);
+
+      stopWatchdog();
+      watchdogRef.current = setInterval(() => {
+        const silentMs = Date.now() - lastFrameAtRef.current;
+        if (silentMs > 6000 && !restartingRef.current) {
+          restartingRef.current = true;
+          setStalled(true);
+          startScanner(true).finally(() => {
+            restartingRef.current = false;
+          });
+        }
+      }, 2000);
     } catch (e) {
       // qr-scanner surfaces getUserMedia's DOMException (with .name) directly,
       // or a plain string/Error when no camera exists — distinguish them so
@@ -229,18 +278,22 @@ export default function ScannerPage() {
       } else if (name === 'NotReadableError' || name === 'TrackStartError') {
         setCameraError('The camera is in use by another app. Close other camera apps, then tap Start Scanner again.');
       } else {
-        setCameraError('Could not start the camera. Tap Start Scanner again, or use manual entry below.');
+        setCameraError('The camera opened but the scanner engine failed to start. Tap Start Scanner again, or use manual entry below.');
       }
       scannerRef.current?.destroy();
       scannerRef.current = null;
+      setScanning(false);
+      stopWatchdog();
     } finally {
       setStarting(false);
     }
   }
 
   async function stopScanner() {
+    stopWatchdog();
     scannerRef.current?.stop();
     setScanning(false);
+    setStalled(false);
   }
 
   // ---------------- gate: session required ----------------
@@ -290,18 +343,28 @@ export default function ScannerPage() {
           <div className="mt-4 rounded-lg bg-amber-600 p-4 text-sm font-medium">{cameraError}</div>
         )}
 
+        {stalled && (
+          <div className="mt-4 rounded-lg bg-amber-500/90 p-3 text-center text-sm font-medium">
+            Decoder went quiet — restarting the scanner automatically…
+          </div>
+        )}
+
         <div className="mt-4">
           {/* ALWAYS mounted (never display:none/unmounted): qr-scanner attaches
               its live decode loop directly to this <video> element, so it must
               already exist in the DOM before start() runs. muted+playsInline
               are required for iOS Safari to actually play the stream inline
-              instead of forcing fullscreen (which breaks frame capture). */}
+              instead of forcing fullscreen (which breaks frame capture).
+              min-h ensures it never collapses to 0px before video metadata
+              loads — a zero-size element was one of the candidate causes of
+              "camera looks on but nothing scans" and costs nothing to rule out. */}
           <video
             id="qr-video"
             ref={videoRef}
             muted
             playsInline
-            className="w-full rounded-xl bg-stone-950"
+            style={{ minHeight: '260px' }}
+            className="w-full rounded-xl bg-stone-950 object-cover"
           />
           {scanning && (
             <button onClick={stopScanner} className="mt-3 w-full rounded-lg border border-stone-600 py-2 text-sm">
@@ -313,7 +376,7 @@ export default function ScannerPage() {
         {!scanning ? (
           <div className="mt-8 text-center">
             <button
-              onClick={startScanner}
+              onClick={() => startScanner(false)}
               disabled={starting}
               className="w-full rounded-2xl bg-emerald-600 py-6 text-2xl font-bold disabled:opacity-50"
             >
@@ -322,7 +385,7 @@ export default function ScannerPage() {
           </div>
         ) : (
           <p className="mt-2 text-center text-sm text-stone-400">
-            Point the camera at the invitation QR — it scans automatically.
+            {stalled ? 'Reconnecting the decoder…' : 'Live — point the camera at the invitation QR, it scans automatically.'}
           </p>
         )}
 

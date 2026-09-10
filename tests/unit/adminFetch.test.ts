@@ -1,11 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// adminFetch reads the current Firebase client user — stub it out so no
-// client SDK is initialized in the Node test environment.
-vi.mock('@/lib/firebase/client', () => ({
-  getFirebaseAuth: () => ({ currentUser: null }),
-}));
-
 import { adminFetch } from '@/lib/client/api';
 
 let calls: Array<{ path: string; init: RequestInit }>;
@@ -25,6 +19,12 @@ describe('adminFetch content-type handling', () => {
 
     await adminFetch('/api/admin/templates', { method: 'POST', body: JSON.stringify({ a: 1 }) });
     expect(calls[1].init.headers).toEqual({ 'Content-Type': 'application/json' });
+  });
+
+  it('attaches no Authorization header — the admin_session cookie is the authority', async () => {
+    await adminFetch('/api/admin/ushers');
+    const headers = calls[0].init.headers as Record<string, string>;
+    expect(headers.Authorization ?? headers.authorization).toBeUndefined();
   });
 
   it('does NOT set Content-Type for FormData bodies so the browser can set the multipart boundary', async () => {

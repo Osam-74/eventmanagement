@@ -2,6 +2,7 @@
 
 import { signOut } from 'firebase/auth';
 import { getFirebaseAuth } from '@/lib/firebase/client';
+import { clearAdminSessionCache } from '@/lib/client/useAdmin';
 
 /**
  * Full logout: clears the SERVER session cookie first (the authority),
@@ -9,6 +10,7 @@ import { getFirebaseAuth } from '@/lib/firebase/client';
  * residue in either auth state.
  */
 export async function signOutAdmin(redirectTo?: () => void): Promise<void> {
+  clearAdminSessionCache();
   try {
     await fetch('/api/auth/session', { method: 'DELETE' });
   } catch {

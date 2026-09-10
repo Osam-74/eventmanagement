@@ -1,10 +1,16 @@
 'use client';
 
-import { getFirebaseAuth } from '@/lib/firebase/client';
-
+/**
+ * Admin API fetch. Authentication is the server-established admin_session
+ * HttpOnly cookie — set by /api/auth/session POST after full validation and
+ * re-confirmed against users/{uid} on EVERY request server-side. The
+ * client deliberately does NOT attach a Firebase ID token any more: the
+ * cookie carries equivalent authority, and the removed getIdToken() call
+ * put a Firebase Auth network round-trip (with its own failure mode) in
+ * front of every API request. (The server still accepts Bearer tokens for
+ * tooling and tests.)
+ */
 export async function adminFetch(path: string, init?: RequestInit): Promise<Response> {
-  const user = getFirebaseAuth().currentUser;
-  const token = user ? await user.getIdToken() : null;
   // Let the browser set the multipart boundary itself when uploading files —
   // forcing application/json on a FormData body breaks req.formData().
   const isFormBody = typeof FormData !== 'undefined' && init?.body instanceof FormData;
@@ -12,7 +18,6 @@ export async function adminFetch(path: string, init?: RequestInit): Promise<Resp
     ...init,
     headers: {
       ...(isFormBody ? {} : { 'Content-Type': 'application/json' }),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init?.headers ?? {}),
     },
   });

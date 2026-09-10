@@ -127,7 +127,7 @@ describe('/scan protection and PIN-only usher authentication', () => {
   });
 
   it('usher session does not grant administrator API access', async () => {
-    const r = await page.request.get(`${BASE}/api/admin/dashboard?eventId=${EVENT_ID}`);
+    const r = await page.request.get(`${BASE}/api/admin/dashboard/activity?eventId=${EVENT_ID}`);
     expect(r.status()).toBe(401);
     const rMe = await page.request.get(`${BASE}/api/me`);
     const me = await rMe.json().catch(() => ({ admin: null }));
@@ -226,6 +226,40 @@ describe('admin login: ONE deterministic success sequence', () => {
       await p.getByRole('button', { name: 'Sign in' }).click();
       await p.waitForURL(`${BASE}/admin`, { timeout: 20000 });
       await expectVisible(p.getByText('E2E Root Admin'));
+    } finally {
+      await ctx.close();
+    }
+  });
+});
+
+describe('dashboard: progressive load, no duplicate session checks, no permission flash', () => {
+  it('renders the dashboard with ONE session GET and independent widget panels', async () => {
+    const ctx = await browser.newContext();
+    const p = await ctx.newPage();
+    try {
+      const sessionGets: string[] = [];
+      p.on('request', (r) => {
+        if (r.url().includes('/api/auth/session') && r.method() === 'GET') sessionGets.push(r.url());
+      });
+      await p.goto(`${BASE}/login`, { waitUntil: 'domcontentloaded' });
+      await p.locator('#admin-email').fill(ADMIN_EMAIL);
+      await p.locator('#admin-password').fill(ADMIN_PASSWORD);
+      await p.getByRole('button', { name: 'Sign in' }).click();
+      await p.waitForURL(`${BASE}/admin`, { timeout: 20000 });
+
+      // The four widget panels all populate (each via its own request).
+      await expectVisible(p.getByText('Scanning —', { exact: false }), 20000);
+      await expectVisible(p.getByRole('heading', { name: 'Ushers' }), 20000);
+      await expectVisible(p.getByRole('heading', { name: 'Recent scans' }), 20000);
+      await expectVisible(p.getByRole('heading', { name: 'Latest batches' }), 20000);
+
+      await p.waitForTimeout(3000);
+      // Exactly TWO session GETs for the entire flow — one from the login
+      // page's already-authenticated check + ONE for the whole admin area
+      // (layout + pages share a single session fetch; regression: 4+).
+      expect(sessionGets.length).toBe(2);
+      // A ROOT_ADMIN never sees a false permission flash.
+      expect(await p.getByText('You lack').count()).toBe(0);
     } finally {
       await ctx.close();
     }

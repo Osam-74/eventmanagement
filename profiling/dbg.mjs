@@ -1,0 +1,14 @@
+import { chromium } from 'playwright';
+const BASE = 'http://127.0.0.1:3222';
+const browser = await chromium.launch();
+const page = await (await browser.newContext()).newPage();
+page.on('console', (m) => console.log('[console]', m.type(), m.text().slice(0, 200)));
+page.on('requestfailed', (r) => console.log('[reqfail]', r.url().slice(0, 120), r.failure()?.errorText));
+await page.goto(`${BASE}/login`, { waitUntil: 'networkidle' });
+await page.fill('input[type="email"]', 'perf-root@example.test');
+await page.fill('input[type="password"]', 'perf-root-pass-12345');
+await page.click('button[type="submit"]');
+await page.waitForTimeout(8000);
+console.log('url:', page.url());
+console.log('body:', (await page.textContent('body'))?.slice(0, 400));
+await browser.close();

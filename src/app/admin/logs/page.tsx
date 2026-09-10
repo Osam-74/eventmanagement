@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { adminFetch, adminJson } from '@/lib/client/api';
+import { useState } from 'react';
+import { adminFetch } from '@/lib/client/api';
 import { useSelectedEvent } from '@/lib/client/useAdmin';
+import { useAdminWidget } from '@/lib/client/useAdminWidget';
 
 type ScanRow = {
   id: string;
@@ -27,29 +28,17 @@ const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : '—
 
 export default function LogsPage() {
   const { eventId } = useSelectedEvent();
-  const [rows, setRows] = useState<ScanRow[]>([]);
   const [filter, setFilter] = useState('');
-  const [accepted, setAccepted] = useState(0);
-  const [rejected, setRejected] = useState(0);
-
-  const load = useCallback(() => {
-    if (!eventId) return;
-    adminJson<{ ok: boolean; dashboard: { recentScans: ScanRow[]; scanCounts: { accepted: number; rejected: number } } | null }>(
-      `/api/admin/dashboard?eventId=${eventId}`
-    ).then((r) => {
-      if (r?.dashboard) {
-        setRows(r.dashboard.recentScans);
-        setAccepted(r.dashboard.scanCounts.accepted);
-        setRejected(r.dashboard.scanCounts.rejected);
-      }
-    });
-  }, [eventId]);
-
-  useEffect(() => {
-    load();
-    const t = setInterval(load, 5000);
-    return () => clearInterval(t);
-  }, [load]);
+  // Bounded recent window (100 rows) + counts, from the lightweight activity
+  // widget endpoint. Visibility-aware 10s polling with an in-flight guard —
+  // a slow response can never stack overlapping requests.
+  const activity = useAdminWidget<{
+    recentScans: ScanRow[];
+    scanCounts: { accepted: number; rejected: number };
+  }>(eventId ? `/api/admin/dashboard/activity?eventId=${eventId}&limit=100` : null, { pollMs: 10000 });
+  const rows = activity.data?.recentScans ?? [];
+  const accepted = activity.data?.scanCounts.accepted ?? 0;
+  const rejected = activity.data?.scanCounts.rejected ?? 0;
 
   async function exportCsv() {
     const res = await adminFetch(`/api/admin/export?eventId=${eventId}`);
@@ -70,7 +59,7 @@ export default function LogsPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <h2 className="font-semibold">Scan logs (latest 25, live)</h2>
+        <h2 className="font-semibold">Scan logs (latest 100, live)</h2>
         <select value={filter} onChange={(e) => setFilter(e.target.value)} className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm">
           <option value="">All results</option>
           <option value="accepted">Accepted</option>
@@ -87,6 +76,13 @@ export default function LogsPage() {
         </button>
       </div>
 
+      {activity.error && (
+        <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
+          {activity.error}{' '}
+          <button onClick={activity.retry} className="rounded bg-red-600 px-2 py-0.5 text-white">Retry</button>
+        </div>
+      )}
+      {activity.loading && <div className="animate-pulse space-y-2 rounded-xl bg-white p-4 shadow-sm"><div className="h-4 rounded bg-stone-100" /><div className="h-4 rounded bg-stone-100" /><div className="h-4 rounded bg-stone-100" /></div>}
       <div className="rounded-xl bg-white p-4 shadow-sm">
         <table className="w-full text-sm">
           <thead>

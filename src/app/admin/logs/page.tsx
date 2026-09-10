@@ -52,15 +52,19 @@ export default function LogsPage() {
     URL.revokeObjectURL(url);
   }
 
-  if (!eventId) return <p className="text-stone-500">Select an event first.</p>;
+  if (!eventId) return <p className="text-brand-navy-700/60">Select an event first.</p>;
 
   const visible = filter ? rows.filter((r) => r.result === filter) : rows;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <h2 className="font-semibold">Scan logs (latest 100, live)</h2>
-        <select value={filter} onChange={(e) => setFilter(e.target.value)} className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm">
+        <h2 className="font-semibold text-brand-navy-900">Scan logs (latest 100, live)</h2>
+        <select
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          className="rounded-lg border border-brand-ice-200 bg-brand-ice-50 px-3 py-1.5 text-sm text-brand-navy-900 outline-none focus:border-brand-blue-500"
+        >
           <option value="">All results</option>
           <option value="accepted">Accepted</option>
           <option value="already_used">Already used</option>
@@ -68,10 +72,10 @@ export default function LogsPage() {
           <option value="invalid">Invalid</option>
           <option value="scanning_disabled">Scanning disabled</option>
         </select>
-        <span className="text-sm text-stone-500">
+        <span className="text-sm text-brand-navy-700/60">
           {accepted} accepted · {rejected} rejected
         </span>
-        <button onClick={exportCsv} className="ml-auto rounded-lg bg-stone-900 px-4 py-2 text-sm text-white">
+        <button onClick={exportCsv} className="ml-auto rounded-lg bg-brand-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-blue-600">
           Export CSV (full log)
         </button>
       </div>
@@ -82,29 +86,35 @@ export default function LogsPage() {
           <button onClick={activity.retry} className="rounded bg-red-600 px-2 py-0.5 text-white">Retry</button>
         </div>
       )}
-      {activity.loading && <div className="animate-pulse space-y-2 rounded-xl bg-white p-4 shadow-sm"><div className="h-4 rounded bg-stone-100" /><div className="h-4 rounded bg-stone-100" /><div className="h-4 rounded bg-stone-100" /></div>}
-      <div className="rounded-xl bg-white p-4 shadow-sm">
+      {activity.loading && (
+        <div className="animate-pulse space-y-2 rounded-xl border border-brand-ice-200 bg-white p-4 shadow-sm">
+          <div className="h-4 rounded bg-brand-ice-100" />
+          <div className="h-4 rounded bg-brand-ice-100" />
+          <div className="h-4 rounded bg-brand-ice-100" />
+        </div>
+      )}
+      <div className="overflow-hidden rounded-xl border border-brand-ice-200 bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b text-left text-xs uppercase text-stone-400">
-              <th className="py-2">Time</th>
-              <th className="py-2">Result</th>
-              <th className="py-2">Serial</th>
-              <th className="py-2">Usher</th>
-              <th className="py-2">Gate</th>
+            <tr className="border-b border-brand-ice-200 bg-brand-ice-50 text-left text-xs font-semibold uppercase tracking-wide text-brand-navy-700/50">
+              <th className="px-4 py-2.5">Time</th>
+              <th className="px-4 py-2.5">Result</th>
+              <th className="px-4 py-2.5">Serial</th>
+              <th className="px-4 py-2.5">Usher</th>
+              <th className="px-4 py-2.5">Gate</th>
             </tr>
           </thead>
           <tbody>
             {visible.map((r) => (
-              <tr key={r.id} className="border-t border-stone-100">
-                <td className="py-2 text-stone-500">{fmt(r.scannedAt)}</td>
-                <td className={`py-2 font-medium ${RESULT_STYLE[r.result] ?? ''}`}>{r.result}</td>
-                <td className="py-2 font-mono">{r.serialNumber ?? '—'}</td>
-                <td className="py-2">{r.usherName ?? '—'}</td>
-                <td className="py-2 text-stone-500">{r.gateId ?? '—'}</td>
+              <tr key={r.id} className="border-t border-brand-ice-100 transition hover:bg-brand-ice-50/60">
+                <td className="px-4 py-2.5 text-brand-navy-700/60">{fmt(r.scannedAt)}</td>
+                <td className={`px-4 py-2.5 font-medium ${RESULT_STYLE[r.result] ?? 'text-brand-navy-900'}`}>{r.result}</td>
+                <td className="px-4 py-2.5 font-mono text-brand-navy-900">{r.serialNumber ?? '—'}</td>
+                <td className="px-4 py-2.5 text-brand-navy-800">{r.usherName ?? '—'}</td>
+                <td className="px-4 py-2.5 text-brand-navy-700/60">{r.gateId ?? '—'}</td>
               </tr>
             ))}
-            {visible.length === 0 && <tr><td className="py-3 text-stone-500">No scan logs yet.</td></tr>}
+            {visible.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center text-brand-navy-700/50">No scan logs yet.</td></tr>}
           </tbody>
         </table>
       </div>

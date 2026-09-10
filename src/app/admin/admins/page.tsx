@@ -57,21 +57,24 @@ export default function AdminsPage() {
     load();
   }
 
+  const inputCls =
+    'rounded-lg border border-brand-ice-200 bg-brand-ice-50 px-3 py-2 text-sm text-brand-navy-900 outline-none focus:border-brand-blue-500 focus:bg-white focus:ring-2 focus:ring-brand-blue-500/20';
+
   return (
     <div className="space-y-6">
       {can('canManageAdmins') && (
-        <form onSubmit={create} className="rounded-xl bg-white p-4 shadow-sm">
-          <h2 className="mb-1 font-semibold">Create administrator</h2>
-          <p className="mb-3 text-sm text-stone-500">
+        <form onSubmit={create} className="rounded-xl border border-brand-ice-200 bg-white p-4 shadow-sm">
+          <h2 className="mb-1 font-semibold text-brand-navy-900">Create administrator</h2>
+          <p className="mb-3 text-sm text-brand-navy-700/60">
             New administrators start with only the capabilities you tick. You cannot grant a capability you do not
             have yourself.
           </p>
           <div className="grid gap-3 sm:grid-cols-3">
-            <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} className="rounded-lg border border-stone-300 px-3 py-2" required />
-            <input placeholder="Display name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="rounded-lg border border-stone-300 px-3 py-2" required />
-            <input type="password" placeholder="Password (min 10 chars)" value={password} onChange={(e) => setPassword(e.target.value)} className="rounded-lg border border-stone-300 px-3 py-2" required minLength={10} />
+            <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} required />
+            <input placeholder="Display name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} className={inputCls} required />
+            <input type="password" placeholder="Password (min 10 chars)" value={password} onChange={(e) => setPassword(e.target.value)} className={inputCls} required minLength={10} />
           </div>
-          <div className="mt-3 flex flex-wrap gap-4 text-sm">
+          <div className="mt-3 flex flex-wrap gap-4 text-sm text-brand-navy-800">
             {PERMS.map((p) => (
               <label key={p} className="flex items-center gap-1.5">
                 <input
@@ -79,65 +82,67 @@ export default function AdminsPage() {
                   checked={Boolean(perms[p])}
                   disabled={p === 'canManageAdmins' && !can('canManageAdmins')}
                   onChange={(e) => setPerms({ ...perms, [p]: e.target.checked })}
+                  className="accent-brand-blue-500"
                 />
                 {p}
               </label>
             ))}
           </div>
-          {msg && <p className="mt-2 text-sm text-stone-700">{msg}</p>}
-          <button className="mt-3 rounded-lg bg-stone-900 px-4 py-2 text-white">Create</button>
+          {msg && <p className="mt-2 text-sm text-brand-navy-700">{msg}</p>}
+          <button className="mt-3 rounded-lg bg-brand-blue-500 px-4 py-2 font-medium text-white hover:bg-brand-blue-600">Create</button>
         </form>
       )}
 
-      <div className="rounded-xl bg-white p-4 shadow-sm">
-        <h2 className="mb-3 font-semibold">Administrators</h2>
+      <div className="overflow-hidden rounded-xl border border-brand-ice-200 bg-white shadow-sm">
+        <h2 className="border-b border-brand-ice-200 bg-brand-ice-50 px-4 py-3 font-semibold text-brand-navy-900">Administrators</h2>
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b text-left text-xs uppercase text-stone-400">
-              <th className="py-2">Name</th>
-              <th className="py-2">Permissions</th>
-              <th className="py-2 text-right">Actions</th>
+            <tr className="border-b border-brand-ice-200 bg-brand-ice-50 text-left text-xs font-semibold uppercase tracking-wide text-brand-navy-700/50">
+              <th className="px-4 py-2.5">Name</th>
+              <th className="px-4 py-2.5">Permissions</th>
+              <th className="px-4 py-2.5 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {admins.map((a) => (
-              <tr key={a.uid} className="border-t border-stone-100 align-top">
-                <td className="py-2">
-                  <p className="font-medium">
+              <tr key={a.uid} className="border-t border-brand-ice-100 align-top transition hover:bg-brand-ice-50/60">
+                <td className="px-4 py-2.5">
+                  <p className="font-medium text-brand-navy-900">
                     {a.displayName}
                     {a.accountType === 'ROOT_ADMIN' && (
-                      <span className="ml-2 rounded bg-stone-900 px-2 py-0.5 text-xs text-white">ROOT</span>
+                      <span className="ml-2 rounded bg-brand-navy-900 px-2 py-0.5 text-xs text-white">ROOT</span>
                     )}
                   </p>
-                  <p className="text-stone-500">{a.email}</p>
+                  <p className="text-brand-navy-700/60">{a.email}</p>
                   {!a.active && <p className="text-red-600">disabled</p>}
                 </td>
-                <td className="py-2">
+                <td className="px-4 py-2.5">
                   <div className="flex flex-wrap gap-2">
                     {a.accountType !== 'ROOT_ADMIN' && can('canManageAdmins')
                       ? PERMS.map((p) => (
-                          <label key={p} className="flex items-center gap-1 text-xs">
+                          <label key={p} className="flex items-center gap-1 text-xs text-brand-navy-800">
                             <input
                               type="checkbox"
                               checked={Boolean(a.permissions?.[p])}
                               disabled={p === 'canManageAdmins' && !can('canManageAdmins') && !a.permissions?.[p]}
                               onChange={(e) => patch(a.uid, { permissions: { [p]: e.target.checked } })}
+                              className="accent-brand-blue-500"
                             />
                             {p.replace('can', '').replace('Manage', '')}
                           </label>
                         ))
                       : PERMS.filter((p) => a.permissions?.[p]).map((p) => (
-                          <span key={p} className="rounded bg-stone-100 px-2 py-0.5 text-xs">{p}</span>
+                          <span key={p} className="rounded bg-brand-ice-100 px-2 py-0.5 text-xs text-brand-navy-700">{p}</span>
                         ))}
                   </div>
                 </td>
-                <td className="py-2 text-right">
+                <td className="px-4 py-2.5 text-right">
                   {a.accountType !== 'ROOT_ADMIN' && can('canManageAdmins') && (
-                    <button onClick={() => patch(a.uid, { active: !a.active })} className="rounded border border-stone-300 px-2 py-1 text-xs">
+                    <button onClick={() => patch(a.uid, { active: !a.active })} className="rounded-md border border-brand-ice-200 px-2 py-1 text-xs text-brand-navy-700 hover:bg-brand-ice-50">
                       {a.active ? 'Disable' : 'Enable'}
                     </button>
                   )}
-                  {a.uid === profile?.uid && <span className="ml-2 text-xs text-stone-400">(you)</span>}
+                  {a.uid === profile?.uid && <span className="ml-2 text-xs text-brand-navy-700/40">(you)</span>}
                 </td>
               </tr>
             ))}

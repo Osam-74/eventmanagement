@@ -66,23 +66,26 @@ export default function UshersPage() {
     load();
   }
 
-  if (!eventId) return <p className="text-stone-500">Select an event first.</p>;
+  if (!eventId) return <p className="text-brand-navy-700/60">Select an event first.</p>;
+
+  const inputCls =
+    'rounded-lg border border-brand-ice-200 bg-brand-ice-50 px-3 py-2 text-sm text-brand-navy-900 outline-none focus:border-brand-blue-500 focus:bg-white focus:ring-2 focus:ring-brand-blue-500/20';
 
   return (
     <div className="space-y-6">
       {can('canManageUshers') && (
-        <form onSubmit={create} className="rounded-xl bg-white p-4 shadow-sm">
-          <h2 className="mb-1 font-semibold">Create usher (gate official)</h2>
-          <p className="mb-3 text-sm text-stone-500">
+        <form onSubmit={create} className="rounded-xl border border-brand-ice-200 bg-white p-4 shadow-sm">
+          <h2 className="mb-1 font-semibold text-brand-navy-900">Create usher (gate official)</h2>
+          <p className="mb-3 text-sm text-brand-navy-700/60">
             The PIN alone identifies the usher at the gate — no name or event selection there.
             Leave PIN empty for a secure auto-generated unique 6-digit PIN.
             The PIN is shown to you exactly once; hand it over privately.
           </p>
           <div className="grid gap-3 sm:grid-cols-4">
-            <input placeholder="Usher name" value={name} onChange={(e) => setName(e.target.value)} className="rounded-lg border border-stone-300 px-3 py-2" required />
-            <input placeholder="PIN (optional, 6 digits)" value={pin} onChange={(e) => setPin(e.target.value)} className="rounded-lg border border-stone-300 px-3 py-2" />
-            <input placeholder="Gate label (optional)" value={gateId} onChange={(e) => setGateId(e.target.value)} className="rounded-lg border border-stone-300 px-3 py-2" />
-            <button className="rounded-lg bg-stone-900 px-4 py-2 text-white">Create</button>
+            <input placeholder="Usher name" value={name} onChange={(e) => setName(e.target.value)} className={inputCls} required />
+            <input placeholder="PIN (optional, 6 digits)" value={pin} onChange={(e) => setPin(e.target.value)} className={inputCls} />
+            <input placeholder="Gate label (optional)" value={gateId} onChange={(e) => setGateId(e.target.value)} className={inputCls} />
+            <button className="rounded-lg bg-brand-blue-500 px-4 py-2 font-medium text-white hover:bg-brand-blue-600">Create</button>
           </div>
           {msg && <p className="mt-2 text-sm text-red-600">{msg}</p>}
           {createdPin && (
@@ -93,22 +96,22 @@ export default function UshersPage() {
         </form>
       )}
 
-      <div className="rounded-xl bg-white p-4 shadow-sm">
-        <h2 className="mb-3 font-semibold">Ushers</h2>
+      <div className="overflow-hidden rounded-xl border border-brand-ice-200 bg-white shadow-sm">
+        <h2 className="border-b border-brand-ice-200 bg-brand-ice-50 px-4 py-3 font-semibold text-brand-navy-900">Ushers</h2>
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b text-left text-xs uppercase text-stone-400">
-              <th className="py-2">Name</th>
-              <th className="py-2">Gate</th>
-              <th className="py-2">Admitted</th>
-              <th className="py-2">Last seen</th>
-              <th className="py-2 text-right">Actions</th>
+            <tr className="border-b border-brand-ice-200 bg-brand-ice-50 text-left text-xs font-semibold uppercase tracking-wide text-brand-navy-700/50">
+              <th className="px-4 py-2.5">Name</th>
+              <th className="px-4 py-2.5">Gate</th>
+              <th className="px-4 py-2.5">Admitted</th>
+              <th className="px-4 py-2.5">Last seen</th>
+              <th className="px-4 py-2.5 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {ushers.map((u) => (
-              <tr key={u.id} className="border-t border-stone-100">
-                <td className="py-2">
+              <tr key={u.id} className="border-t border-brand-ice-100 transition hover:bg-brand-ice-50/60">
+                <td className="px-4 py-2.5 text-brand-navy-900">
                   {u.name}
                   {!u.active && <span className="ml-2 rounded bg-red-100 px-2 py-0.5 text-xs text-red-700">disabled</span>}
                   {u.needsPinMigration && <span className="ml-2 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-700">PIN reset required</span>}
@@ -116,22 +119,22 @@ export default function UshersPage() {
                     <span className="ml-2 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-700">locked until {fmt(u.lockedUntil)}</span>
                   )}
                 </td>
-                <td className="py-2 text-stone-500">{u.gateId ?? '—'}</td>
-                <td className="py-2 font-medium">{u.acceptedCount}</td>
-                <td className="py-2 text-stone-500">{fmt(u.lastSeenAt)}</td>
-                <td className="py-2 text-right">
-                  <div className="flex justify-end gap-1">
-                    <button onClick={() => patch(u.id, { active: !u.active })} className="rounded border border-stone-300 px-2 py-1 text-xs">
+                <td className="px-4 py-2.5 text-brand-navy-700/60">{u.gateId ?? '—'}</td>
+                <td className="px-4 py-2.5 font-medium text-brand-navy-900">{u.acceptedCount}</td>
+                <td className="px-4 py-2.5 text-brand-navy-700/60">{fmt(u.lastSeenAt)}</td>
+                <td className="px-4 py-2.5 text-right">
+                  <div className="flex justify-end gap-1.5">
+                    <button onClick={() => patch(u.id, { active: !u.active })} className="rounded-md border border-brand-ice-200 px-2 py-1 text-xs text-brand-navy-700 hover:bg-brand-ice-50">
                       {u.active ? 'Disable' : 'Enable'}
                     </button>
-                    <button onClick={() => { if (confirm('Reset PIN? You will get a new PIN shown once.')) patch(u.id, { resetPin: true }); }} className="rounded border border-stone-300 px-2 py-1 text-xs">
+                    <button onClick={() => { if (confirm('Reset PIN? You will get a new PIN shown once.')) patch(u.id, { resetPin: true }); }} className="rounded-md border border-brand-ice-200 px-2 py-1 text-xs text-brand-navy-700 hover:bg-brand-ice-50">
                       Reset PIN
                     </button>
                   </div>
                 </td>
               </tr>
             ))}
-            {ushers.length === 0 && <tr><td className="py-3 text-stone-500">No ushers yet.</td></tr>}
+            {ushers.length === 0 && <tr><td className="px-4 py-6 text-center text-brand-navy-700/50">No ushers yet.</td></tr>}
           </tbody>
         </table>
       </div>

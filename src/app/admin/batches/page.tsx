@@ -51,7 +51,7 @@ export default function BatchesPage() {
 
   useEffect(() => { if (eventId) load(); }, [eventId]);
 
-  if (!eventId) return <p className="text-stone-500">Select an event first.</p>;
+  if (!eventId) return <p className="text-brand-navy-700/60">Select an event first.</p>;
 
   async function download(id: string) {
     const res = await adminFetch(`/api/admin/batches/${id}/download`);
@@ -66,35 +66,35 @@ export default function BatchesPage() {
   }
 
   return (
-    <div className="rounded-xl bg-white p-4 shadow-sm">
-      <h2 className="mb-3 font-semibold">Batches</h2>
+    <div className="overflow-hidden rounded-xl border border-brand-ice-200 bg-white shadow-sm">
+      <h2 className="border-b border-brand-ice-200 bg-brand-ice-50 px-4 py-3 font-semibold text-brand-navy-900">Batches</h2>
       {error && (
-        <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p className="mx-4 mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
           {linkify(error)} <button onClick={load} className="underline">Retry</button>
         </p>
       )}
       <table className="w-full text-sm">
         <tbody>
           {batches.map((b) => (
-            <tr key={b.id} className="border-t border-stone-100">
-              <td className="py-2">
+            <tr key={b.id} className="border-t border-brand-ice-100 transition hover:bg-brand-ice-50/60">
+              <td className="px-4 py-2.5 text-brand-navy-900">
                 {b.completedQuantity}/{b.requestedQuantity} cards ({b.outputProfile})
                 {b.failedQuantity > 0 && <span className="ml-2 text-red-600">{b.failedQuantity} failed</span>}
               </td>
-              <td className="py-2 text-stone-500">{b.status}</td>
-              <td className="py-2 text-stone-500">{b.createdAt ? new Date(b.createdAt).toLocaleString() : ''}</td>
-              <td className="py-2 text-right">
+              <td className="px-4 py-2.5 text-brand-navy-700/60">{b.status}</td>
+              <td className="px-4 py-2.5 text-brand-navy-700/60">{b.createdAt ? new Date(b.createdAt).toLocaleString() : ''}</td>
+              <td className="px-4 py-2.5 text-right">
                 <button
                   onClick={() => download(b.id)}
                   disabled={b.completedQuantity === 0}
-                  className="rounded border border-stone-300 px-3 py-1 disabled:opacity-40"
+                  className="rounded-md border border-brand-ice-200 px-3 py-1 text-brand-navy-700 hover:bg-brand-ice-50 disabled:opacity-40"
                 >
                   Download ZIP
                 </button>
               </td>
             </tr>
           ))}
-          {batches.length === 0 && <tr><td className="text-stone-500">No batches yet.</td></tr>}
+          {batches.length === 0 && <tr><td className="px-4 py-6 text-center text-brand-navy-700/50">No batches yet.</td></tr>}
         </tbody>
       </table>
     </div>

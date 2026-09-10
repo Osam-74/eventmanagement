@@ -114,7 +114,7 @@ export default function GeneratePage() {
           Each card receives a unique cryptographically random QR credential and a traceable serial number
           printed on the card (or a custom tag instead, if you set one below). Generated on demand — never pre-generated.
         </p>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-sm text-brand-navy-800">
             Quantity (1–50)
             <input
@@ -130,13 +130,6 @@ export default function GeneratePage() {
               <option value="hq">HQ / archive (8K)</option>
             </select>
           </label>
-          <button
-            type="submit"
-            disabled={busy || !can('canGenerateInvites')}
-            className="mt-6 h-10 rounded-lg bg-brand-blue-500 px-4 font-medium text-white hover:bg-brand-blue-600 disabled:opacity-50"
-          >
-            {busy ? 'Generating…' : 'Generate'}
-          </button>
         </div>
 
         {/* Flexible card generation (owner request, 2026-09-10): a tag prints
@@ -168,7 +161,16 @@ export default function GeneratePage() {
             </span>
           </label>
         </div>
-        {!can('canGenerateInvites') && <p className="mt-2 text-sm text-red-600">You lack the canGenerateInvites permission.</p>}
+        <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
+          {!can('canGenerateInvites') && <p className="text-sm text-red-600">You lack the canGenerateInvites permission.</p>}
+          <button
+            type="submit"
+            disabled={busy || !can('canGenerateInvites')}
+            className="h-10 rounded-lg bg-brand-blue-500 px-6 font-medium text-white hover:bg-brand-blue-600 disabled:opacity-50"
+          >
+            {busy ? 'Generating…' : 'Generate'}
+          </button>
+        </div>
       </form>
 
       {result && (

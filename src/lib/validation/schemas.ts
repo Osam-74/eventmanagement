@@ -9,6 +9,27 @@ export const permissionSchema = z.object({
   canViewAnalytics: z.boolean().optional().default(false),
 });
 
+/**
+ * Same shape as permissionSchema but WITHOUT the `.default(false)` on each
+ * key — used for admin UPDATES, where the admins page PATCHes one toggled
+ * checkbox at a time (e.g. `{ canManageEvents: true }`). If this instead
+ * parsed through permissionSchema, Zod's per-key defaults would silently
+ * expand that partial payload into a FULL object with every other
+ * permission defaulted to false — undoing updateAdminAccount()'s
+ * partial-merge fix before it ever saw the request (root cause of the
+ * "can only hold one permission at a time" bug, owner-reported 2026-09-10).
+ * permissionSchema itself stays default-filling for admin CREATION, where
+ * omitted keys should mean "false", which is correct there.
+ */
+export const partialPermissionSchema = z.object({
+  canManageAdmins: z.boolean().optional(),
+  canManageEvents: z.boolean().optional(),
+  canGenerateInvites: z.boolean().optional(),
+  canManageInvites: z.boolean().optional(),
+  canManageUshers: z.boolean().optional(),
+  canViewAnalytics: z.boolean().optional(),
+});
+
 export const createEventSchema = z.object({
   name: z.string().min(2).max(120),
   slug: z
@@ -136,5 +157,5 @@ export const createAdminSchema = z.object({
 export const updateAdminSchema = z.object({
   active: z.boolean().optional(),
   displayName: z.string().min(2).max(80).optional(),
-  permissions: permissionSchema.optional(),
+  permissions: partialPermissionSchema.optional(),
 });

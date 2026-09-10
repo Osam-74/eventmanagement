@@ -40,3 +40,21 @@ export function deriveTemplateGeometry(canvasWidth: number, canvasHeight: number
 // approved box (418, 975, 236).
 export const REFERENCE_CANVAS = { width: 1070, height: 1470 } as const;
 export const REFERENCE_QR_BOX = { x: 418, y: 975, size: 236 } as const;
+
+/**
+ * Serial-print fallback. Templates uploaded before serial support shipped
+ * have no `serial` in their stored geometry (or an older shape) — but the
+ * traceable serial ON the card is a core product decision. Generation must
+ * never silently skip it: resolve to the approved default overlay when the
+ * stored template does not carry an enabled one.
+ */
+export function resolveSerialGeometry(template: {
+  canvasWidth: number;
+  canvasHeight: number;
+  serial?: { enabled?: boolean; x: number; y: number; fontSize: number; color: string };
+}): TemplateGeometry['serial'] {
+  if (template.serial && template.serial.enabled) {
+    return template.serial as TemplateGeometry['serial'];
+  }
+  return deriveTemplateGeometry(template.canvasWidth, template.canvasHeight).serial;
+}

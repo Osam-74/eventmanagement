@@ -6,6 +6,7 @@ import { writeAudit } from '@/lib/audit';
 import { generateQrToken } from '@/lib/qr/token';
 import { digestToken } from '@/lib/qr/digest';
 import { formatSerial } from '@/lib/invitation/serial';
+import { resolveSerialGeometry } from '@/lib/invitation/geometry';
 import { renderInvitationImage } from '@/lib/invitation/render';
 import { FieldValue } from 'firebase-admin/firestore';
 
@@ -35,6 +36,14 @@ export async function POST(req: NextRequest) {
   const template = templateSnap.data()!;
 
   const [masterFile] = await bucket().file(template.storagePath as string).download();
+
+  // Templates uploaded before serial support have no stored serial geometry —
+  // resolve to the approved default so every card carries its traceable serial.
+  const serialGeometry = resolveSerialGeometry({
+    canvasWidth: template.canvasWidth as number,
+    canvasHeight: template.canvasHeight as number,
+    serial: template.serial as never,
+  });
 
   // create batch record
   const batchRef = db().collection('batches').doc();
@@ -74,7 +83,7 @@ export async function POST(req: NextRequest) {
           canvasWidth: template.canvasWidth as number,
           canvasHeight: template.canvasHeight as number,
           qr: template.qr as { x: number; y: number; size: number },
-          serial: template.serial as never,
+          serial: serialGeometry,
         },
         qrToken: token,
         serial,

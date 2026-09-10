@@ -143,7 +143,10 @@ describe.skipIf(!hasEmu)('dashboard widget routes (progressive loading)', () => 
     expect(body.ok).toBe(true);
     expect(body.event.name).toBe('Widget Wedding');
     expect(body.event.scanningEnabled).toBe(true);
-    expect(body.event.totals).toEqual({ generated: 120, used: 40, revoked: 5, unused: 75, rescansAllowed: 2 });
+    // checkIns falls back to totalUsed for events seeded before this field
+    // existed (owner request, 2026-09-10: multi-use cards need a separate
+    // 'every admission' counter distinct from 'cards fully used up').
+    expect(body.event.totals).toEqual({ generated: 120, used: 40, revoked: 5, unused: 75, rescansAllowed: 2, checkIns: 40 });
 
     // missing eventId → 400, never an unfiltered read
     const bad = await getEvent(authed(`/api/admin/dashboard/event`, rootUid));

@@ -139,7 +139,7 @@ export type EventSummary = {
   lifecycleStatus: string;
   scanningEnabled: boolean;
   scanningEnabledAt: string | null;
-  totals: { generated: number; used: number; revoked: number; unused: number; rescansAllowed: number };
+  totals: { generated: number; used: number; revoked: number; unused: number; rescansAllowed: number; checkIns: number };
 } | null;
 
 type EventSummaryContextValue = {

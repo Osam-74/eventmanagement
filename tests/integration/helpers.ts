@@ -41,6 +41,7 @@ export async function seedEvent(
     lastSerialSequence: 0,
     totalGenerated: 0,
     totalUsed: 0,
+    totalCheckIns: 0,
     totalRevoked: 0,
     rescanAllowedCount: 0,
     createdAt: FieldValue.serverTimestamp(),
@@ -51,22 +52,33 @@ export async function seedEvent(
 
 export async function seedInvitation(
   db: Firestore,
-  opts: { token?: string; eventId?: string; status?: 'unused' | 'used' | 'revoked'; serialNumber?: string; usedByUsherId?: string | null }
+  opts: {
+    token?: string; eventId?: string; status?: 'unused' | 'used' | 'revoked'; serialNumber?: string;
+    usedByUsherId?: string | null; tag?: string | null; usageLimit?: number | null; usageCount?: number;
+  }
 ): Promise<{ token: string; digest: string; serial: string }> {
   const token = opts.token ?? generateQrToken();
   const digest = digestToken(token);
   const serial = opts.serialNumber ?? 'ISWED-00001';
   const status = opts.status ?? 'unused';
+  // usageLimit/usageCount default to the single-use shape (limit 1) that
+  // every card had before flexible generation — omitting them from opts
+  // reproduces exactly what pre-existing invitation docs look like, so
+  // every test written before multi-use support stays valid unchanged.
   await db.collection('invitations').doc(digest).set({
     eventId: opts.eventId ?? EV1,
     batchId: 'batch-x',
     serialNumber: serial,
+    tag: opts.tag ?? null,
+    usageLimit: opts.usageLimit === undefined ? 1 : opts.usageLimit,
+    usageCount: opts.usageCount ?? (status === 'used' ? 1 : 0),
     status,
     guestAllowance: 1,
     imageStoragePath: `events/${EV1}/invitations/batch-x/${serial}.jpg`,
     outputProfile: 'share',
     generatedAt: FieldValue.serverTimestamp(),
     generatedBy: 'admin-x',
+    firstUsedAt: status === 'used' ? FieldValue.serverTimestamp() : null,
     usedAt: status === 'used' ? FieldValue.serverTimestamp() : null,
     usedAtClientEstimate: null,
     usedByUsherId: opts.usedByUsherId ?? null,

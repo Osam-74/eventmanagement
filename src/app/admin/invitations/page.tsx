@@ -7,6 +7,9 @@ import { useAdmin, useSelectedEvent } from '@/lib/client/useAdmin';
 type Invitation = {
   id: string;
   serialNumber: string;
+  tag: string | null;
+  usageLimit: number | null; // null = unlimited uses
+  usageCount: number;
   status: 'unused' | 'used' | 'revoked';
   outputProfile: string;
   generatedAt: string | null;
@@ -161,6 +164,7 @@ export default function InvitationsPage() {
             <tr className="border-b border-brand-ice-200 bg-brand-ice-50 text-left text-xs font-semibold uppercase tracking-wide text-brand-navy-700/50">
               <th className="px-4 py-3">Serial</th>
               <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Uses</th>
               <th className="px-4 py-3">Scanned by</th>
               <th className="px-4 py-3">Scanned at</th>
               <th className="px-4 py-3 text-right">Actions</th>
@@ -170,12 +174,20 @@ export default function InvitationsPage() {
             {items.map((inv) => (
               <Fragment key={inv.id}>
                 <tr className="border-t border-brand-ice-100 transition hover:bg-brand-ice-50/60">
-                  <td className="px-4 py-2.5 font-mono font-medium text-brand-navy-900">{inv.serialNumber}</td>
+                  <td className="px-4 py-2.5">
+                    {inv.tag && (
+                      <span className="mr-1.5 rounded-full bg-brand-blue-500/10 px-2 py-0.5 text-xs font-semibold text-brand-blue-700">{inv.tag}</span>
+                    )}
+                    <span className={`font-mono font-medium text-brand-navy-900 ${inv.tag ? 'text-xs text-brand-navy-700/50' : ''}`}>{inv.serialNumber}</span>
+                  </td>
                   <td className="px-4 py-2.5">
                     <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[inv.status]}`}>{inv.status}</span>
                   </td>
-                  <td className="px-4 py-2.5 text-brand-navy-800">{inv.status === 'used' ? (inv.usedByUsherName ?? '—') : '—'}</td>
-                  <td className="px-4 py-2.5 text-brand-navy-700/60">{inv.status === 'used' ? fmt(inv.usedAt) : '—'}</td>
+                  <td className="px-4 py-2.5 text-brand-navy-700/70">
+                    {inv.usageCount}{inv.usageLimit === null ? ' (∞)' : ` / ${inv.usageLimit}`}
+                  </td>
+                  <td className="px-4 py-2.5 text-brand-navy-800">{inv.usageCount > 0 ? (inv.usedByUsherName ?? '—') : '—'}</td>
+                  <td className="px-4 py-2.5 text-brand-navy-700/60">{inv.usageCount > 0 ? fmt(inv.usedAt) : '—'}</td>
                   <td className="px-4 py-2.5 text-right">
                     <div className="flex justify-end gap-1.5">
                       <button
@@ -212,7 +224,7 @@ export default function InvitationsPage() {
                 </tr>
                 {expanded === inv.id && (
                   <tr className="bg-brand-ice-50/70">
-                    <td colSpan={5} className="px-4 py-3 text-xs text-brand-navy-700/80">
+                    <td colSpan={6} className="px-4 py-3 text-xs text-brand-navy-700/80">
                       <p>Generated: {fmt(inv.generatedAt)} · Profile: {inv.outputProfile}</p>
                       {inv.status === 'revoked' && <p className="text-red-600">Revoked: {fmt(inv.revokedAt)} — {inv.revocationReason}</p>}
                       {inv.supersededByInvitationId && (
@@ -237,7 +249,7 @@ export default function InvitationsPage() {
               </Fragment>
             ))}
             {items.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-6 text-center text-brand-navy-700/50">No invitations found for this search.</td></tr>
+              <tr><td colSpan={6} className="px-4 py-6 text-center text-brand-navy-700/50">No invitations found for this search.</td></tr>
             )}
           </tbody>
         </table>

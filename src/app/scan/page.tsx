@@ -16,8 +16,8 @@ type SessionInfo = {
 };
 
 type ScanResult =
-  | { kind: 'granted'; serial: string | null; at: string | null }
-  | { kind: 'denied'; code: string; message: string; serial: string | null; firstUsedAt?: string | null }
+  | { kind: 'granted'; serial: string | null; tag: string | null; at: string | null; usageCount?: number; usageLimit?: number | null }
+  | { kind: 'denied'; code: string; message: string; serial: string | null; tag: string | null; firstUsedAt?: string | null }
   | { kind: 'error'; message: string };
 
 const COOLDOWN_MS = 2500;
@@ -192,7 +192,14 @@ export default function ScannerPage() {
       const body = await res.json();
       if (!mountedRef.current) return;
       if (body.code === 'ACCEPTED') {
-        setResult({ kind: 'granted', serial: body.serialNumber ?? null, at: body.checkedInAt ?? null });
+        setResult({
+          kind: 'granted',
+          serial: body.serialNumber ?? null,
+          tag: body.tag ?? null,
+          at: body.checkedInAt ?? null,
+          usageCount: body.usageCount,
+          usageLimit: body.usageLimit,
+        });
         setSession((s) => (s ? { ...s, acceptedCount: s.acceptedCount + 1 } : s));
         beep(true);
       } else {
@@ -201,6 +208,7 @@ export default function ScannerPage() {
           code: body.code,
           message: body.message,
           serial: body.serialNumber ?? null,
+          tag: body.tag ?? null,
           firstUsedAt: body.firstUsedAt ?? null,
         });
         beep(false);
@@ -500,7 +508,13 @@ export default function ScannerPage() {
             {result.kind === 'granted' && (
               <>
                 <p className="text-3xl font-black tracking-wide">ACCESS GRANTED ✓</p>
-                {result.serial && <p className="mt-2 font-mono text-lg">No. {result.serial}</p>}
+                {result.tag && <p className="mt-2 text-lg font-semibold">{result.tag}</p>}
+                {result.serial && <p className="mt-1 font-mono text-sm opacity-90">No. {result.serial}</p>}
+                {typeof result.usageCount === 'number' && result.usageLimit !== 1 && (
+                  <p className="mt-1 text-xs opacity-80">
+                    Uses: {result.usageCount}{result.usageLimit === null ? ' (unlimited)' : ` of ${result.usageLimit}`}
+                  </p>
+                )}
                 <p className="mt-1 text-sm opacity-80">Welcome the guest in</p>
               </>
             )}
@@ -508,6 +522,7 @@ export default function ScannerPage() {
               <>
                 <p className="text-3xl font-black tracking-wide">{result.code === 'ALREADY_USED' ? 'ALREADY USED ✗' : 'DENIED ✗'}</p>
                 <p className="mt-2 text-sm">{result.message}</p>
+                {result.tag && <p className="mt-1 text-sm font-semibold">{result.tag}</p>}
                 {result.serial && <p className="mt-1 font-mono text-sm">No. {result.serial}</p>}
                 {result.firstUsedAt && (
                   <p className="mt-1 text-xs opacity-80">

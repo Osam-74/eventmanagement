@@ -37,6 +37,13 @@ export async function GET(req: NextRequest) {
         revoked: event.totalRevoked ?? 0,
         unused: Math.max((event.totalGenerated ?? 0) - (event.totalUsed ?? 0) - (event.totalRevoked ?? 0), 0),
         rescansAllowed: event.rescanAllowedCount ?? 0,
+        // Total admissions across ALL scans, including repeat scans of one
+        // multi-use card (owner request, 2026-09-10) — distinct from `used`,
+        // which only counts cards that became fully exhausted. Events from
+        // before this field existed had only single-use cards, where every
+        // admission WAS an exhaustion, so totalUsed is the exact right
+        // fallback for them.
+        checkIns: event.totalCheckIns ?? event.totalUsed ?? 0,
       },
     },
   });

@@ -54,7 +54,7 @@ function ErrorCard({ message, onRetry }: { message: string; onRetry: () => void 
 const card = 'rounded-xl border border-brand-ice-200 bg-white p-4 shadow-sm';
 
 /** Small monochrome line icons — restrained on purpose: one accent color, no per-card rainbow. */
-function Icon({ name }: { name: 'ticket' | 'clock' | 'check' | 'x' | 'refresh' }) {
+function Icon({ name }: { name: 'ticket' | 'clock' | 'check' | 'x' | 'refresh' | 'layers' }) {
   const common = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
   switch (name) {
     case 'ticket':
@@ -92,6 +92,13 @@ function Icon({ name }: { name: 'ticket' | 'clock' | 'check' | 'x' | 'refresh' }
           <path d="M4 4v5h5M20 20v-5h-5" />
         </svg>
       );
+    case 'layers':
+      return (
+        <svg {...common}>
+          <path d="m12 3 9 5-9 5-9-5 9-5Z" />
+          <path d="m3 13 9 5 9-5" />
+        </svg>
+      );
   }
 }
 
@@ -126,7 +133,7 @@ function KpiCard({
 }: {
   label: string;
   value: number;
-  icon: 'ticket' | 'clock' | 'check' | 'x' | 'refresh';
+  icon: 'ticket' | 'clock' | 'check' | 'x' | 'refresh' | 'layers';
   ring?: { value: number; total: number };
 }) {
   return (
@@ -242,12 +249,19 @@ export default function DashboardPage() {
       ) : !ev ? (
         <div className={card}><p className="text-sm text-brand-navy-700/60">Event not found. It may have been removed.</p></div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <div className={`grid grid-cols-2 gap-3 sm:grid-cols-5 ${ev.totals.checkIns !== ev.totals.used ? 'lg:grid-cols-6' : ''}`}>
           <KpiCard label="Generated" value={ev.totals.generated} icon="ticket" />
           <KpiCard label="Unused" value={ev.totals.unused} icon="clock" />
           <KpiCard label="Admitted" value={ev.totals.used} icon="check" ring={{ value: ev.totals.used, total: ev.totals.generated }} />
           <KpiCard label="Revoked" value={ev.totals.revoked} icon="x" />
           <KpiCard label="Rescans allowed" value={ev.totals.rescansAllowed} icon="refresh" />
+          {/* Multi-use cards (owner request, 2026-09-10): total scans admitted
+              across every card, including repeat uses of one multi-use card —
+              only shown once it actually differs from "Admitted" (cards fully
+              exhausted), so single-use events see the same 5 cards as before. */}
+          {ev.totals.checkIns !== ev.totals.used && (
+            <KpiCard label="Check-ins" value={ev.totals.checkIns} icon="layers" />
+          )}
         </div>
       )}
 

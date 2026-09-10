@@ -77,6 +77,19 @@ export const generateBatchSchema = z
     eventId: z.string().min(4),
     quantity: z.number().int().min(1).max(50),
     profile: z.enum(['share', 'hq']).default('share'),
+    // Flexible card generation (owner request, 2026-09-10):
+    // - tag: printed on the card INSTEAD of the serial number (e.g. "FAMILY",
+    //   "VIP"). Every card still gets a real serial internally for lookup —
+    //   omit tag (or send '') for a normal card that prints its serial.
+    // - usageLimit: how many successful scans this card allows before it
+    //   locks like today's single-use cards. Omit/null = unlimited uses.
+    tag: z
+      .string()
+      .trim()
+      .max(24, 'Tag must be 24 characters or fewer')
+      .regex(/^[a-zA-Z0-9 .-]*$/, 'Tag can only contain letters, numbers, spaces, "." and "-"')
+      .optional(),
+    usageLimit: z.number().int().min(1).max(9999).nullable().optional(),
   })
   .superRefine((v, ctx) => {
     if (v.profile === 'hq' && v.quantity > 20) {

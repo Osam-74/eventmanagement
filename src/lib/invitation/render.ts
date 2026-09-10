@@ -19,6 +19,31 @@ export type TemplateGeometry = {
 export const SHARE_LONG_EDGE = 3000;
 export const HQ_LONG_EDGE = 7680;
 
+/**
+ * Custom card tags (e.g. "GRANDPARENTS TABLE ONE", "VIP") can run far
+ * longer than a fixed-length serial was ever tuned for. Shrinks fontSize
+ * (down to half, floor) so the text never runs past `maxTextW` — kept as
+ * its own pure function so the width math is unit-testable without
+ * rendering a full image. No-ops (returns the inputs unchanged) whenever
+ * the text already fits, so every existing serial's size is untouched.
+ */
+export function fitSerialFontSize(
+  text: string,
+  fontSize: number,
+  maxTextW: number
+): { fontSize: number; letterSpacing: number; textW: number } {
+  let size = fontSize;
+  let letterSpacing = Math.round(size * 0.08);
+  let textW = measureSerialWidth(text, size, letterSpacing);
+  if (textW > maxTextW) {
+    const shrink = Math.max(maxTextW / textW, 0.5);
+    size = Math.round(size * shrink);
+    letterSpacing = Math.round(size * 0.08);
+    textW = measureSerialWidth(text, size, letterSpacing);
+  }
+  return { fontSize: size, letterSpacing, textW };
+}
+
 function escapeXml(s: string): string {
   return s.replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' })[c]!);
 }
@@ -72,11 +97,16 @@ export async function renderInvitationImage(opts: {
     // <text> through fontconfig, and the Vercel serverless image ships no
     // usable fonts — the serial silently came out blank on production
     // cards. Paths render identically on every host. See serialGlyphs.ts.
-    const fontSize = Math.round(geometry.serial.fontSize * scale);
+    // Long custom tags never spill past a sane width relative to the QR box
+    // instead of running into the card's frame artwork; every existing
+    // serial is well under this bound so its size/position is untouched.
+    const { fontSize, letterSpacing, textW } = fitSerialFontSize(
+      serial,
+      Math.round(geometry.serial.fontSize * scale),
+      qrSize * 1.6
+    );
     const sx = Math.round(geometry.serial.x * scale);
     const sy = Math.round(geometry.serial.y * scale);
-    const letterSpacing = Math.round(fontSize * 0.08);
-    const textW = measureSerialWidth(serial, fontSize, letterSpacing);
     const color = escapeXml(geometry.serial.color);
     let content = serialToSvgPaths(serial, sx, sy, fontSize, letterSpacing, color);
     if (geometry.serial.plate) {

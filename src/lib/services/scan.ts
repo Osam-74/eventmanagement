@@ -18,9 +18,14 @@ export type ScanOutcome = {
   code: ScanOutcomeCode;
   message: string;
   serialNumber?: string | null;
+  tag?: string | null;
   firstUsedAt?: string | null;
   usedByUsherName?: string | null;
   checkedInAt?: string | null;
+  // Multi-use cards (owner request, 2026-09-10): usageLimit is null for an
+  // unlimited-use card, otherwise the number of scans it allows in total.
+  usageCount?: number;
+  usageLimit?: number | null;
 };
 
 export type ScanInput = {
@@ -146,6 +151,7 @@ async function performScanOnce(firestore: Firestore, input: ScanInput): Promise<
 
     const invitation = invitationSnap.data()!;
     const serialNumber = invitation.serialNumber as string;
+    const tag = (invitation.tag as string | null) ?? null;
     const logWithSerial = { ...baseLog, invitationSerialNumber: serialNumber };
 
     if (invitation.eventId !== eventId) {
@@ -155,25 +161,45 @@ async function performScanOnce(firestore: Firestore, input: ScanInput): Promise<
 
     if (invitation.status === 'revoked') {
       tx.create(firestore.collection('scanLogs').doc(), { ...logWithSerial, result: 'revoked' });
-      return { code: 'REVOKED', message: 'Invitation revoked', serialNumber } as ScanOutcome;
+      return { code: 'REVOKED', message: 'Invitation revoked', serialNumber, tag } as ScanOutcome;
     }
 
-    if (invitation.status === 'used') {
+    // Flexible generation (owner request, 2026-09-10): usageLimit === null
+    // means unlimited uses; a normal card is usageLimit === 1 (the same
+    // single-use behavior as before this feature). Invitations generated
+    // before this feature shipped carry no usageLimit field at all —
+    // treat that exactly as limit 1, reproducing today's behavior for
+    // every card generated to date, byte for byte.
+    const usageLimitRaw = invitation.usageLimit as number | null | undefined;
+    const usageLimit = usageLimitRaw === undefined ? 1 : usageLimitRaw;
+    const usageCount = (invitation.usageCount as number | undefined) ?? 0;
+    const exhausted = invitation.status === 'used' || (usageLimit !== null && usageCount >= usageLimit);
+
+    if (exhausted) {
       tx.create(firestore.collection('scanLogs').doc(), { ...logWithSerial, result: 'already_used' });
-      const usedAt = (invitation.usedAt as Timestamp | null)?.toDate?.();
+      const firstUsedAt = (invitation.firstUsedAt as Timestamp | null)?.toDate?.() ?? (invitation.usedAt as Timestamp | null)?.toDate?.();
       return {
         code: 'ALREADY_USED',
-        message: 'Invitation already used',
+        message: usageLimit !== null && usageLimit > 1 ? 'This card has no uses left' : 'Invitation already used',
         serialNumber,
-        firstUsedAt: usedAt ? usedAt.toISOString() : null,
+        tag,
+        firstUsedAt: firstUsedAt ? firstUsedAt.toISOString() : null,
         usedByUsherName: (invitation.usedByUsherName as string | null) ?? null,
+        usageCount,
+        usageLimit,
       } as ScanOutcome;
     }
 
-    // ---- valid unused invitation: consume atomically ----
+    // ---- valid invitation with allowance remaining: consume atomically ----
     const checkedInAt = Timestamp.now();
+    const newUsageCount = usageCount + 1;
+    const willExhaust = usageLimit !== null && newUsageCount >= usageLimit;
     tx.update(invitationRef, {
-      status: 'used',
+      status: willExhaust ? 'used' : 'unused',
+      usageCount: newUsageCount,
+      // firstUsedAt is set once and never overwritten — the historical
+      // record of the very first admission, kept even across many reuses.
+      firstUsedAt: invitation.firstUsedAt ?? FieldValue.serverTimestamp(),
       usedAt: FieldValue.serverTimestamp(),
       usedAtClientEstimate: checkedInAt,
       usedByUsherId: usherId,
@@ -186,14 +212,27 @@ async function performScanOnce(firestore: Firestore, input: ScanInput): Promise<
       lastScanAt: FieldValue.serverTimestamp(),
       lastSeenAt: FieldValue.serverTimestamp(),
     });
-    tx.update(eventRef, { totalUsed: FieldValue.increment(1) });
+    tx.update(eventRef, {
+      // totalCheckIns: every accepted admission, including repeat scans of
+      // one multi-use card — "how many people we let in in total".
+      totalCheckIns: FieldValue.increment(1),
+      // totalUsed: increments by exactly 1 the moment a CARD becomes
+      // exhausted (not per scan) — for single-use cards that is still
+      // its one and only scan, so this is byte-identical to the counter's
+      // pre-existing meaning. Keeps the dashboard's "unused = generated -
+      // used - revoked" arithmetic correct even with multi-use cards.
+      ...(willExhaust ? { totalUsed: FieldValue.increment(1) } : {}),
+    });
     tx.create(firestore.collection('scanLogs').doc(), { ...logWithSerial, result: 'accepted' });
 
     return {
       code: 'ACCEPTED',
       message: 'Access granted',
       serialNumber,
+      tag,
       checkedInAt: checkedInAt.toDate().toISOString(),
+      usageCount: newUsageCount,
+      usageLimit,
     } as ScanOutcome;
   });
 }

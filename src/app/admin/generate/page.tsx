@@ -9,7 +9,7 @@ type GenResponse = {
   batchId?: string;
   completed?: number;
   failed?: number;
-  items?: { serialNumber: string }[];
+  items?: { serialNumber: string; tag?: string | null }[];
   message?: string;
 };
 
@@ -45,6 +45,8 @@ export default function GeneratePage() {
   const { eventId } = useSelectedEvent();
   const [quantity, setQuantity] = useState(10);
   const [profile, setProfile] = useState<'share' | 'hq'>('share');
+  const [tag, setTag] = useState('');
+  const [usageLimit, setUsageLimit] = useState(''); // empty string = unlimited uses
   const [result, setResult] = useState<GenResponse | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -73,9 +75,16 @@ export default function GeneratePage() {
     e.preventDefault();
     setBusy(true);
     setResult(null);
+    const parsedLimit = usageLimit.trim() ? parseInt(usageLimit, 10) : null;
     const r = await adminJson<GenResponse>('/api/admin/generate', {
       method: 'POST',
-      body: JSON.stringify({ eventId, quantity, profile }),
+      body: JSON.stringify({
+        eventId,
+        quantity,
+        profile,
+        tag: tag.trim() || undefined,
+        usageLimit: parsedLimit,
+      }),
     }).catch(() => null);
     setResult(r ?? { ok: false, message: 'Generation failed.' });
     setBusy(false);
@@ -103,7 +112,7 @@ export default function GeneratePage() {
         <h2 className="mb-3 font-semibold text-brand-navy-900">Generate invitation cards</h2>
         <p className="mb-3 text-sm text-brand-navy-700/60">
           Each card receives a unique cryptographically random QR credential and a traceable serial number
-          printed on the card. Generated on demand — never pre-generated.
+          printed on the card (or a custom tag instead, if you set one below). Generated on demand — never pre-generated.
         </p>
         <div className="grid gap-3 sm:grid-cols-3">
           <label className="text-sm text-brand-navy-800">
@@ -129,6 +138,36 @@ export default function GeneratePage() {
             {busy ? 'Generating…' : 'Generate'}
           </button>
         </div>
+
+        {/* Flexible card generation (owner request, 2026-09-10): a tag prints
+            on the card INSTEAD of the serial (e.g. "FAMILY", "VIP") — leave
+            blank for a normal card that prints its serial number. A usage
+            limit lets one card be scanned more than once before it locks;
+            leave blank for unlimited uses. Both apply to the whole batch. */}
+        <div className="mt-3 grid gap-3 border-t border-brand-ice-100 pt-3 sm:grid-cols-2">
+          <label className="text-sm text-brand-navy-800">
+            Tag (optional — replaces the serial on the card)
+            <input
+              type="text" maxLength={24} value={tag} placeholder="e.g. FAMILY, VIP, USHER"
+              onChange={(e) => setTag(e.target.value)}
+              className={inputCls}
+            />
+            <span className="mt-1 block text-xs text-brand-navy-700/50">
+              Leave blank for a normal card — it still prints its own serial number.
+            </span>
+          </label>
+          <label className="text-sm text-brand-navy-800">
+            Uses per card (optional)
+            <input
+              type="number" min={1} max={9999} value={usageLimit} placeholder="Unlimited"
+              onChange={(e) => setUsageLimit(e.target.value)}
+              className={inputCls}
+            />
+            <span className="mt-1 block text-xs text-brand-navy-700/50">
+              Leave blank for unlimited uses. 1 (default) behaves exactly like today&apos;s single-use cards.
+            </span>
+          </label>
+        </div>
         {!can('canGenerateInvites') && <p className="mt-2 text-sm text-red-600">You lack the canGenerateInvites permission.</p>}
       </form>
 
@@ -142,6 +181,11 @@ export default function GeneratePage() {
               <p className="mt-1 text-sm text-brand-navy-700/60">
                 Batch <code>{result.batchId}</code> — download it from the list below.
               </p>
+              {result.items?.[0]?.tag && (
+                <p className="mt-1 text-sm text-brand-navy-700/70">
+                  Tag printed on every card: <span className="font-semibold">{result.items[0].tag}</span>
+                </p>
+              )}
               <p className="mt-2 text-xs text-brand-navy-700/60">
                 Serials: {result.items?.slice(0, 10).map((i) => i.serialNumber).join(', ')}
                 {(result.items?.length ?? 0) > 10 ? ' …' : ''}

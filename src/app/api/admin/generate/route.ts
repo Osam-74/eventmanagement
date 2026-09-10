@@ -22,6 +22,14 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return badRequest(parsed.error.issues[0]?.message ?? 'Invalid input');
   const { eventId, quantity, profile } = parsed.data;
 
+  // Flexible generation (owner request, 2026-09-10): every card in THIS batch
+  // shares the same tag + usage limit. tag prints on the card INSTEAD of the
+  // serial (serial is still allocated + stored for internal traceability).
+  // usageLimit omitted/null = the card can be scanned an unlimited number of
+  // times; a normal single-use card is just usageLimit === 1 (the default).
+  const tag = parsed.data.tag && parsed.data.tag.trim() ? parsed.data.tag.trim().toUpperCase() : null;
+  const usageLimit = parsed.data.usageLimit ?? 1;
+
   const eventRef = db().collection('events').doc(eventId);
   const eventSnap = await eventRef.get();
   if (!eventSnap.exists) return badRequest('Event not found');
@@ -57,12 +65,14 @@ export async function POST(req: NextRequest) {
     status: 'generating',
     requestedBy: res.admin.uid,
     outputProfile: profile,
+    tag,
+    usageLimit,
     createdAt: FieldValue.serverTimestamp(),
     completedAt: null,
   });
-  await writeAudit('BATCH_CREATED', res.admin.uid, { batchId: batchRef.id, eventId, quantity, profile });
+  await writeAudit('BATCH_CREATED', res.admin.uid, { batchId: batchRef.id, eventId, quantity, profile, tag, usageLimit });
 
-  const items: { serialNumber: string; invitationId: string }[] = [];
+  const items: { serialNumber: string; invitationId: string; tag: string | null }[] = [];
   let failed = 0;
 
   for (let i = 0; i < quantity; i++) {
@@ -70,7 +80,9 @@ export async function POST(req: NextRequest) {
       const token = generateQrToken();
       const digest = digestToken(token);
 
-      // allocate the traceable serial number atomically per card
+      // allocate the traceable serial number atomically per card — every
+      // card gets one regardless of tag, so admins can always trace a card
+      // even if a dozen "FAMILY" cards look identical on their face.
       const sequence = await db().runTransaction(async (tx) => {
         const snap = await tx.get(eventRef);
         const seq = ((snap.data()?.lastSerialSequence as number | undefined) ?? 0) + 1;
@@ -78,6 +90,9 @@ export async function POST(req: NextRequest) {
         return seq;
       });
       const serial = formatSerial(event.code as string, sequence);
+      // What's actually drawn on the card face — the tag replaces the
+      // serial there (same vector-glyph renderer, same styling/position).
+      const cardText = tag ?? serial;
 
       const image = await renderInvitationImage({
         templateBuffer: masterFile,
@@ -88,7 +103,7 @@ export async function POST(req: NextRequest) {
           serial: serialGeometry,
         },
         qrToken: token,
-        serial,
+        serial: cardText,
         profile,
       });
 
@@ -101,12 +116,16 @@ export async function POST(req: NextRequest) {
         eventId,
         batchId: batchRef.id,
         serialNumber: serial,
+        tag,
+        usageLimit,
+        usageCount: 0,
         status: 'unused',
         guestAllowance: 1,
         imageStoragePath: storagePath,
         outputProfile: profile,
         generatedAt: FieldValue.serverTimestamp(),
         generatedBy: res.admin.uid,
+        firstUsedAt: null,
         usedAt: null,
         usedAtClientEstimate: null,
         usedByUsherId: null,
@@ -120,7 +139,7 @@ export async function POST(req: NextRequest) {
         rescanAllowedBy: null,
       });
 
-      items.push({ serialNumber: serial, invitationId: digest });
+      items.push({ serialNumber: serial, invitationId: digest, tag });
       await batchRef.update({ completedQuantity: FieldValue.increment(1) });
     } catch (e) {
       console.error('generation item failed', (e as Error).message);

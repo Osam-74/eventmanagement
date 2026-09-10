@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import sharp from 'sharp';
-import { renderInvitationImage } from '@/lib/invitation/render';
+import { renderInvitationImage, fitSerialFontSize } from '@/lib/invitation/render';
 import { deriveTemplateGeometry } from '@/lib/invitation/geometry';
 import { measureSerialWidth, serialToSvgPaths } from '@/lib/invitation/serialGlyphs';
 
@@ -34,6 +34,41 @@ describe('serial rendering on invitation cards', () => {
     const svg = serialToSvgPaths('IS26-00042', 100, 100, 34, 3, '#111111');
     expect((svg.match(/<path /g) ?? []).length).toBe(10);
     expect(() => serialToSvgPaths('IS26 00042', 100, 100, 34, 3, '#111111')).not.toThrow();
+  });
+
+  it('fitSerialFontSize leaves a normal serial completely untouched', () => {
+    const fitted = fitSerialFontSize('IS26-00042', 34, 500);
+    expect(fitted.fontSize).toBe(34);
+    expect(fitted.letterSpacing).toBe(Math.round(34 * 0.08));
+  });
+
+  it('fitSerialFontSize shrinks (never below half) a custom tag wider than the allowed width', () => {
+    const longTag = 'GRANDPARENTS TABLE ONE AND TWO';
+    const unshrunkWidth = measureSerialWidth(longTag, 34, Math.round(34 * 0.08));
+    const maxTextW = unshrunkWidth * 0.5; // force shrinking to kick in
+    const fitted = fitSerialFontSize(longTag, 34, maxTextW);
+    expect(fitted.fontSize).toBeLessThan(34);
+    expect(fitted.fontSize).toBeGreaterThanOrEqual(17); // floor: never shrinks past half
+    expect(fitted.textW).toBeLessThanOrEqual(unshrunkWidth);
+  });
+
+  it('renders a long custom tag on a real card without crashing or producing a malformed image', async () => {
+    const template = await sharp({
+      create: { width: 1070, height: 1470, channels: 3, background: '#ffffff' },
+    })
+      .jpeg()
+      .toBuffer();
+    const geometry = deriveTemplateGeometry(1070, 1470);
+    const { buffer } = await renderInvitationImage({
+      templateBuffer: template,
+      geometry,
+      qrToken: 'IS26.LONGTAGSHRINKTESTTOKEN00000000000000000000',
+      serial: 'GRANDPARENTS TABLE ONE',
+      profile: 'share',
+    });
+    const meta = await sharp(buffer).metadata();
+    expect(meta.width).toBeGreaterThan(0);
+    expect(meta.height).toBeGreaterThan(0);
   });
 
   it('renders a card whose serial band actually contains ink pixels distinct from the background', async () => {

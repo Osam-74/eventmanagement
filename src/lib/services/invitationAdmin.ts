@@ -99,9 +99,20 @@ export async function allowRescan(
         if (!usherSnap.exists) usherRef = null;
       }
 
+      // Multi-use cards (owner request, 2026-09-10): releasing an exhausted
+      // card gives back exactly ONE use rather than resetting to zero — a
+      // card exhausted at usageCount 5/5 becomes 4/5, so the gate can admit
+      // it once more. Legacy invitations have no usageCount field at all;
+      // treat that as "1 of a 1-use card", which decrements to 0 — the
+      // exact pre-existing behavior. Written as a plain number, not
+      // FieldValue.increment, so a missing field is never misread as 0.
+      const currentUsageCount = (data.usageCount as number | undefined) ?? 1;
+      const releasedUsageCount = Math.max(currentUsageCount - 1, 0);
+
       // ---- writes ----
       tx.update(invitationRef, {
         status: 'unused',
+        usageCount: releasedUsageCount,
         usedAt: null,
         usedAtClientEstimate: null,
         usedByUsherId: null,
@@ -181,8 +192,13 @@ export async function regenerateInvitationImage(
     };
   }
   const serial = oldData.serialNumber as string;
+  const tag = (oldData.tag as string | null) ?? null;
+  const usageLimit = oldData.usageLimit === undefined ? 1 : (oldData.usageLimit as number | null);
   const eventId = oldData.eventId as string;
   const profile = (oldData.outputProfile as 'share' | 'hq') ?? 'share';
+  // What's actually drawn on the card face — same rule as first generation:
+  // a tag replaces the serial visually; the serial itself is unchanged.
+  const cardText = tag ?? serial;
 
   const eventSnap = await firestore.collection('events').doc(eventId).get();
   if (!eventSnap.exists) return { ok: false, code: 'ERROR', message: 'Event not found' };
@@ -213,7 +229,7 @@ export async function regenerateInvitationImage(
       serial: serialGeometry,
     },
     qrToken: token,
-    serial,
+    serial: cardText,
     profile,
   });
 
@@ -240,12 +256,16 @@ export async function regenerateInvitationImage(
         eventId,
         batchId: oldData.batchId ?? null,
         serialNumber: serial,
+        tag,
+        usageLimit,
+        usageCount: 0,
         status: 'unused',
         guestAllowance: oldData.guestAllowance ?? 1,
         imageStoragePath: storagePath,
         outputProfile: profile,
         generatedAt: FieldValue.serverTimestamp(),
         generatedBy: admin.uid,
+        firstUsedAt: null,
         usedAt: null,
         usedAtClientEstimate: null,
         usedByUsherId: null,

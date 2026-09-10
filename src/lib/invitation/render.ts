@@ -48,7 +48,9 @@ export async function renderInvitationImage(opts: {
 
   const qrBuffer = await QRCode.toBuffer(qrToken, {
     errorCorrectionLevel: 'Q',
-    margin: 0,
+    // Four light modules on every side are part of the QR bitmap itself.
+    // Keep the approved outer box unchanged; artwork/frame is not a quiet zone.
+    margin: 4,
     width: qrSize,
     color: { dark: '#000000ff', light: '#ffffffff' },
   });

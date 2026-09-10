@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, fix/scanner-decode-pipeline]
   pull_request:
     branches: [main]
 
@@ -61,6 +61,8 @@ jobs:
       # offline behaviour, SW cache policy).
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
+      - name: Install mandatory camera-feed encoder
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Run PWA e2e tests (Firestore + Auth emulators)
         run: npx firebase emulators:exec --project demo-eventaccess --only firestore,auth "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 npm run test:pwa"
         env:

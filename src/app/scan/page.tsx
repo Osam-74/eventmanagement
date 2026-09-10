@@ -51,7 +51,8 @@ export default function ScannerPage() {
   const [result, setResult] = useState<ScanResult | null>(null);
   const [online, setOnline] = useState(true);
   const [cameraError, setCameraError] = useState('');
-  const [stalled, setStalled] = useState(false);
+  const [decoderReady, setDecoderReady] = useState(false);
+  const [processing, setProcessing] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const scannerRef = useRef<QrScanner | null>(null);
@@ -64,7 +65,10 @@ export default function ScannerPage() {
   // initialized) instead of leaving the UI stuck showing "scanning" forever.
   const lastFrameAtRef = useRef<number>(0);
   const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const restartingRef = useRef(false);
+  const generationRef = useRef(0);
+  const mountedRef = useRef(false);
+  const cooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const on = () => setOnline(true);
@@ -123,7 +127,12 @@ export default function ScannerPage() {
   }, [session !== null]);
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
+      generationRef.current++;
+      if (cooldownRef.current) clearTimeout(cooldownRef.current);
+      requestRef.current?.abort();
       stopWatchdog();
       scannerRef.current?.destroy();
       scannerRef.current = null;
@@ -131,6 +140,7 @@ export default function ScannerPage() {
   }, []);
 
   async function signOut() {
+    await stopScanner();
     await fetch('/api/usher/signout', { method: 'POST' }).catch(() => undefined);
     stopWatchdog();
     scannerRef.current?.stop();
@@ -151,10 +161,18 @@ export default function ScannerPage() {
       return;
     }
     busyRef.current = true;
+    setProcessing(true);
+    const scanner = scannerRef.current;
+    const generation = generationRef.current;
+    void scanner?.pause();
     lastTokenRef.current = { token, at: now };
+    const controller = new AbortController();
+    requestRef.current = controller;
+    const timeout = setTimeout(() => controller.abort(), 15000);
     try {
       const res = await fetch('/api/scan', {
         method: 'POST',
+        signal: controller.signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           token,
@@ -163,13 +181,16 @@ export default function ScannerPage() {
           deviceInfo: navigator.userAgent.slice(0, 200),
         }),
       });
+      if (!mountedRef.current) return;
       if (res.status === 401) {
+        await stopScanner();
         setSession(null);
         setScanning(false);
         router.replace('/usher/login');
         return;
       }
       const body = await res.json();
+      if (!mountedRef.current) return;
       if (body.code === 'ACCEPTED') {
         setResult({ kind: 'granted', serial: body.serialNumber ?? null, at: body.checkedInAt ?? null });
         setSession((s) => (s ? { ...s, acceptedCount: s.acceptedCount + 1 } : s));
@@ -185,10 +206,21 @@ export default function ScannerPage() {
         beep(false);
       }
     } catch {
+      if (!mountedRef.current) return;
       setResult({ kind: 'error', message: 'Network error — invitation NOT validated. Do not admit. Check connection and scan again.' });
     } finally {
-      setTimeout(() => {
+      clearTimeout(timeout);
+      requestRef.current = null;
+      if (mountedRef.current) cooldownRef.current = setTimeout(() => {
         busyRef.current = false;
+        setProcessing(false);
+        if (scanner && generation === generationRef.current && scanner === scannerRef.current) {
+          lastFrameAtRef.current = Date.now();
+          void scanner.start().catch(() => {
+            void stopScanner();
+            setCameraError('Scanner could not resume. Tap Start Scanner again.');
+          });
+        }
       }, COOLDOWN_MS);
     }
   }
@@ -200,38 +232,18 @@ export default function ScannerPage() {
     }
   }
 
-  // Starts (or restarts) the decode engine and arms a watchdog that proves
-  // frames are actually being PROCESSED, not just that the camera opened.
-  // This is the real fix for "camera looks live but nothing ever scans":
-  // that symptom means getUserMedia succeeded (video renders) while the
-  // decode loop never produced a single callback — previously invisible,
-  // now caught and auto-recovered within a few seconds.
-  async function startScanner(isRestart = false) {
+  // Ready means a frame was processed, not merely that getUserMedia resolved.
+  async function startScanner() {
+    const generation = ++generationRef.current;
+    const current = () => mountedRef.current && generation === generationRef.current;
     setStarting(true);
-    if (!isRestart) setCameraError('');
-    setStalled(false);
+    setDecoderReady(false);
+    setCameraError('');
     try {
       const { default: QrScannerCtor } = await import('qr-scanner');
+      if (!current()) return;
 
-      // qr-scanner opportunistically uses the browser's native
-      // BarcodeDetector API when the device reports support for it
-      // (https://web.dev/shape-detection/). On a real, non-trivial slice of
-      // Android/Chrome installs that native detector self-reports as
-      // supported while its underlying Google Play Services ML Kit module
-      // is missing/broken on-device — detect() then just keeps returning
-      // ZERO results forever, completely silently: no error, no rejected
-      // promise, camera preview looks perfectly normal. That is the exact,
-      // previously invisible root cause of "camera live, nothing ever
-      // scans" — it happens INSIDE the library's own engine selection,
-      // beneath any of our code, which is why swapping wrapper libraries
-      // never fixed it. Forcing the library's own bundled jsQR/ZXing worker
-      // decoder — the same reliable, cross-device-consistent decode path
-      // the confirmed-working reference implementation relies on — removes
-      // this failure mode for good.
-      // Accessing a private static field: intentional (see comment above) —
-      // ts-expect-error rather than a silent cast, so this loudly breaks if
-      // a future qr-scanner version renames/removes the field, forcing us
-      // to re-verify the workaround instead of it quietly rotting.
+      // Retain the existing worker-only decoder while investigating; no library swap.
       // @ts-expect-error intentional access to qr-scanner's private kill-switch for native BarcodeDetector
       QrScannerCtor._disableBarcodeDetector = true;
 
@@ -248,14 +260,26 @@ export default function ScannerPage() {
       const scanner = new QrScannerCtor(
         video,
         (result) => {
+          if (!current()) return;
           lastFrameAtRef.current = Date.now();
+          setDecoderReady(true);
           submitToken(result.data);
         },
         {
           // Fires on EVERY processed frame that found no code — this is our
           // proof-of-life signal, not noise to discard.
-          onDecodeError: () => {
-            lastFrameAtRef.current = Date.now();
+          onDecodeError: (error) => {
+            if (!current()) return;
+            if (error === QrScannerCtor.NO_QR_CODE_FOUND) {
+              // An actual decoded frame with no symbol proves engine readiness.
+              lastFrameAtRef.current = Date.now();
+              setDecoderReady(true);
+              return;
+            }
+            // Never log QR credentials. Normal no-code frames stay quiet.
+            if (process.env.NODE_ENV !== 'production') console.error('[scanner] Decoder failure', error);
+            void stopScanner();
+            setCameraError('QR decoder failed. Tap Start Scanner to retry, or use manual entry.');
           },
           highlightScanRegion: true,
           highlightCodeOutline: true,
@@ -265,28 +289,24 @@ export default function ScannerPage() {
         }
       );
       scannerRef.current = scanner;
+      setResult(null);
       await scanner.start();
-      // Forces the internal decode-engine promise to be awaited right now
-      // (hasFlash() reads it) so a broken engine (e.g. worker init failure)
-      // throws HERE, as a visible camera error, instead of hanging silently
-      // forever inside the per-frame decode loop.
-      await scanner.hasFlash().catch(() => undefined);
+      if (!current()) { scanner.destroy(); return; }
+      // Camera start is not decoder readiness: only a completed frame above
+      // sets decoderReady. hasFlash() checks the camera track, not the worker.
 
       setScanning(true);
-      setResult(null);
 
       stopWatchdog();
       watchdogRef.current = setInterval(() => {
         const silentMs = Date.now() - lastFrameAtRef.current;
-        if (silentMs > 6000 && !restartingRef.current) {
-          restartingRef.current = true;
-          setStalled(true);
-          startScanner(true).finally(() => {
-            restartingRef.current = false;
-          });
+        if (silentMs > 6000 && !busyRef.current && !document.hidden) {
+          void stopScanner();
+          setCameraError('QR decoder is not processing frames. Tap Start Scanner to retry, or use manual entry.');
         }
       }, 2000);
     } catch (e) {
+      if (!current()) return;
       // qr-scanner surfaces getUserMedia's DOMException (with .name) directly,
       // or a plain string/Error when no camera exists — distinguish them so
       // ushers get the RIGHT instruction, not a generic one.
@@ -307,15 +327,18 @@ export default function ScannerPage() {
       setScanning(false);
       stopWatchdog();
     } finally {
-      setStarting(false);
+      if (current()) setStarting(false);
     }
   }
 
   async function stopScanner() {
+    generationRef.current++;
     stopWatchdog();
-    scannerRef.current?.stop();
+    scannerRef.current?.destroy();
+    scannerRef.current = null;
+    setStarting(false);
+    setDecoderReady(false);
     setScanning(false);
-    setStalled(false);
   }
 
   // ---------------- gate: session required ----------------
@@ -365,12 +388,6 @@ export default function ScannerPage() {
           <div className="mt-4 rounded-lg bg-amber-600 p-4 text-sm font-medium">{cameraError}</div>
         )}
 
-        {stalled && (
-          <div className="mt-4 rounded-lg bg-amber-500/90 p-3 text-center text-sm font-medium">
-            Decoder went quiet — restarting the scanner automatically…
-          </div>
-        )}
-
         <div className="mt-4">
           {/* ALWAYS mounted (never display:none/unmounted): qr-scanner attaches
               its live decode loop directly to this <video> element, so it must
@@ -398,16 +415,16 @@ export default function ScannerPage() {
         {!scanning ? (
           <div className="mt-8 text-center">
             <button
-              onClick={() => startScanner(false)}
-              disabled={starting}
+              onClick={() => startScanner()}
+              disabled={starting || processing}
               className="w-full rounded-2xl bg-emerald-600 py-6 text-2xl font-bold disabled:opacity-50"
             >
               {starting ? 'Starting camera…' : '▶ Start Scanner'}
             </button>
           </div>
         ) : (
-          <p className="mt-2 text-center text-sm text-stone-400">
-            {stalled ? 'Reconnecting the decoder…' : 'Live — point the camera at the invitation QR, it scans automatically.'}
+          <p role="status" data-decoder-ready={decoderReady} className="mt-2 text-center text-sm text-stone-400">
+            {processing ? 'Processing invitation…' : decoderReady ? 'Scanner ready — point the camera at the invitation QR.' : 'Camera live — waiting for the QR decoder…'}
           </p>
         )}
 

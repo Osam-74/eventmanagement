@@ -57,6 +57,13 @@ export default function AdminsPage() {
     load();
   }
 
+  async function remove(a: AdminItem) {
+    if (!window.confirm(`Permanently delete ${a.displayName} (${a.email})? This removes their account entirely — they will no longer be able to sign in. This cannot be undone.`)) return;
+    const r = await adminJson<{ ok: boolean; message?: string }>(`/api/admin/admins/${a.uid}`, { method: 'DELETE' }).catch(() => null);
+    if (!r?.ok) { setMsg(r?.message ?? 'Could not delete administrator.'); return; }
+    load();
+  }
+
   const inputCls =
     'rounded-lg border border-brand-ice-200 bg-brand-ice-50 px-3 py-2 text-sm text-brand-navy-900 outline-none focus:border-brand-blue-500 focus:bg-white focus:ring-2 focus:ring-brand-blue-500/20';
 
@@ -95,7 +102,8 @@ export default function AdminsPage() {
 
       <div className="overflow-hidden rounded-xl border border-brand-ice-200 bg-white shadow-sm">
         <h2 className="border-b border-brand-ice-200 bg-brand-ice-50 px-4 py-3 font-semibold text-brand-navy-900">Administrators</h2>
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[680px] text-sm">
           <thead>
             <tr className="border-b border-brand-ice-200 bg-brand-ice-50 text-left text-xs font-semibold uppercase tracking-wide text-brand-navy-700/50">
               <th className="px-4 py-2.5">Name</th>
@@ -142,12 +150,18 @@ export default function AdminsPage() {
                       {a.active ? 'Disable' : 'Enable'}
                     </button>
                   )}
+                  {a.accountType !== 'ROOT_ADMIN' && can('canManageAdmins') && a.uid !== profile?.uid && (
+                    <button onClick={() => remove(a)} className="ml-2 rounded-md border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50">
+                      Delete
+                    </button>
+                  )}
                   {a.uid === profile?.uid && <span className="ml-2 text-xs text-brand-navy-700/40">(you)</span>}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

@@ -135,7 +135,7 @@ export default function InvitationsPage() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Serial number or scanned QR code…"
-            className="min-w-[260px] flex-1 rounded-lg border border-brand-ice-200 bg-brand-ice-50 px-3 py-2 text-sm text-brand-navy-900 outline-none focus:border-brand-blue-500 focus:bg-white focus:ring-2 focus:ring-brand-blue-500/20"
+            className="min-w-[180px] flex-1 rounded-lg border border-brand-ice-200 bg-brand-ice-50 px-3 py-2 text-sm text-brand-navy-900 outline-none focus:border-brand-blue-500 focus:bg-white focus:ring-2 focus:ring-brand-blue-500/20"
           />
           <select
             value={status}
@@ -155,7 +155,8 @@ export default function InvitationsPage() {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-brand-ice-200 bg-white shadow-sm">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] text-sm">
           <thead>
             <tr className="border-b border-brand-ice-200 bg-brand-ice-50 text-left text-xs font-semibold uppercase tracking-wide text-brand-navy-700/50">
               <th className="px-4 py-3">Serial</th>
@@ -240,6 +241,7 @@ export default function InvitationsPage() {
             )}
           </tbody>
         </table>
+        </div>
         {!q && (
           <div className="flex items-center gap-2 border-t border-brand-ice-200 px-4 py-3 text-sm text-brand-navy-700/60">
             <button

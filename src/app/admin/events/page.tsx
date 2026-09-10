@@ -124,7 +124,8 @@ export default function EventsPage() {
 
       <div className="overflow-hidden rounded-xl border border-brand-ice-200 bg-white shadow-sm">
         <h2 className="border-b border-brand-ice-200 bg-brand-ice-50 px-4 py-3 font-semibold text-brand-navy-900">Events</h2>
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-sm">
           <tbody>
             {events.map((ev) => (
               <tr key={ev.id} className="border-t border-brand-ice-100 transition hover:bg-brand-ice-50/60">
@@ -176,6 +177,7 @@ export default function EventsPage() {
             {events.length === 0 && <tr><td className="px-4 py-6 text-center text-brand-navy-700/50">No events yet.</td></tr>}
           </tbody>
         </table>
+        </div>
       </div>
 
       {can('canManageEvents') && (
@@ -188,7 +190,8 @@ export default function EventsPage() {
             <span className="text-xs text-brand-navy-700/50">{showArchived ? 'Hide' : 'Show'}</span>
           </button>
           {showArchived && (
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] text-sm">
               <tbody>
                 {archived.map((ev) => (
                   <tr key={ev.id} className="border-t border-brand-ice-100">
@@ -220,6 +223,7 @@ export default function EventsPage() {
                 {archived.length === 0 && <tr><td className="px-4 py-6 text-center text-brand-navy-700/50">No archived events.</td></tr>}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       )}

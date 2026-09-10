@@ -126,10 +126,10 @@ function KpiCard({
   ring?: { value: number; total: number };
 }) {
   return (
-    <div className="rounded-xl border border-brand-ice-200 bg-white p-4 shadow-sm">
+    <div className="group rounded-xl border border-brand-ice-200 bg-brand-ice-50 p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-brand-blue-400/40 hover:bg-brand-ice-100 hover:shadow-md">
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium uppercase tracking-wide text-brand-navy-700/50">{label}</p>
-        {ring ? <ProgressRing value={ring.value} total={ring.total} /> : <span className="text-brand-navy-700/35"><Icon name={icon} /></span>}
+        {ring ? <ProgressRing value={ring.value} total={ring.total} /> : <span className="text-brand-navy-700/35 transition group-hover:text-brand-blue-500"><Icon name={icon} /></span>}
       </div>
       <p className="mt-2 text-2xl font-semibold text-brand-navy-900">{value}</p>
       {ring && <p className="text-xs text-brand-navy-700/45">of {ring.total} generated</p>}
@@ -246,8 +246,8 @@ export default function DashboardPage() {
                 {activityWidget.data?.scanCounts.accepted ?? 0} accepted · {activityWidget.data?.scanCounts.rejected ?? 0} rejected
                 {' · latest '} {fmt(activityWidget.data?.latestScanAt ?? null)}
               </div>
-              <div className="max-h-72 overflow-y-auto">
-                <table className="w-full text-sm">
+              <div className="max-h-72 overflow-auto">
+                <table className="w-full min-w-[560px] text-sm">
                   <thead>
                     <tr className="text-left text-xs uppercase tracking-wide text-brand-navy-700/40">
                       <th className="py-1.5 font-medium">Ticket</th>
@@ -286,7 +286,8 @@ export default function DashboardPage() {
         ) : batchesWidget.data && batchesWidget.data.batches.length === 0 ? (
           <p className="text-sm text-brand-navy-700/60">No batches yet. Generate invitations from the Generate page.</p>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[480px] text-sm">
             <tbody>
               {batchesWidget.data?.batches.map((b) => (
                 <tr key={b.id} className="border-t border-brand-ice-100">
@@ -297,6 +298,7 @@ export default function DashboardPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

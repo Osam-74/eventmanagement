@@ -158,3 +158,45 @@ export async function updateAdminAccount(
 
   return { ok: true };
 }
+
+/**
+ * Hard delete: removes the users/{uid} record entirely (the Firebase Auth
+ * user is deleted by the caller — see the route — since that's an Auth SDK
+ * call, not a Firestore one). Same Root-protection as updateAdminAccount,
+ * plus: an admin (or the Root Admin) can never delete their OWN account
+ * through this endpoint — that would either strand the last admin able to
+ * manage admins or lock the Root Admin out of their own bootstrap identity.
+ */
+export async function deleteAdminAccount(
+  firestore: Firestore,
+  input: { actor: AdminActor; targetUid: string }
+): Promise<AdminServiceResult> {
+  const { actor, targetUid } = input;
+
+  if (!actorHasPermission(actor, 'canManageAdmins')) {
+    return { ok: false, code: 'FORBIDDEN', message: 'Missing permission: canManageAdmins' };
+  }
+  if (targetUid === actor.uid) {
+    return { ok: false, code: 'FORBIDDEN', message: 'You cannot delete your own account.' };
+  }
+
+  const targetSnap = await firestore.collection('users').doc(targetUid).get();
+  if (!targetSnap.exists) return { ok: false, code: 'NOT_FOUND', message: 'Administrator not found' };
+  const target = targetSnap.data() as Record<string, unknown>;
+
+  if (target.accountType === 'ROOT_ADMIN') {
+    return { ok: false, code: 'FORBIDDEN', message: 'The Root Admin account can never be deleted.' };
+  }
+
+  await firestore.collection('users').doc(targetUid).delete();
+
+  await firestore.collection('auditLogs').add({
+    action: 'ADMIN_DELETED',
+    actor: actor.uid,
+    actorType: 'admin',
+    detail: { targetUid, email: target.email, displayName: target.displayName },
+    at: FieldValue.serverTimestamp(),
+  });
+
+  return { ok: true };
+}

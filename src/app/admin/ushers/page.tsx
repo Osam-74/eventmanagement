@@ -98,7 +98,8 @@ export default function UshersPage() {
 
       <div className="overflow-hidden rounded-xl border border-brand-ice-200 bg-white shadow-sm">
         <h2 className="border-b border-brand-ice-200 bg-brand-ice-50 px-4 py-3 font-semibold text-brand-navy-900">Ushers</h2>
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] text-sm">
           <thead>
             <tr className="border-b border-brand-ice-200 bg-brand-ice-50 text-left text-xs font-semibold uppercase tracking-wide text-brand-navy-700/50">
               <th className="px-4 py-2.5">Name</th>
@@ -137,6 +138,7 @@ export default function UshersPage() {
             {ushers.length === 0 && <tr><td className="px-4 py-6 text-center text-brand-navy-700/50">No ushers yet.</td></tr>}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

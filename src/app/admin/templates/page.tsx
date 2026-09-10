@@ -38,6 +38,15 @@ export default function TemplatesPage() {
     else setMsg(body.message ?? 'Upload failed.');
   }
 
+  async function remove(t: Template) {
+    if (!window.confirm(`Delete template "${t.name}"? This cannot be undone.`)) return;
+    setMsg('');
+    const res = await adminFetch(`/api/admin/templates/${t.id}`, { method: 'DELETE' });
+    const body = await res.json().catch(() => ({}));
+    if (res.ok) { setMsg('Template deleted.'); load(); }
+    else setMsg(body.message ?? 'Could not delete template.');
+  }
+
   const inputCls =
     'rounded-lg border border-brand-ice-200 bg-brand-ice-50 px-3 py-2 text-sm text-brand-navy-900 outline-none focus:border-brand-blue-500 focus:bg-white focus:ring-2 focus:ring-brand-blue-500/20';
 
@@ -61,7 +70,8 @@ export default function TemplatesPage() {
 
       <div className="overflow-hidden rounded-xl border border-brand-ice-200 bg-white shadow-sm">
         <h2 className="border-b border-brand-ice-200 bg-brand-ice-50 px-4 py-3 font-semibold text-brand-navy-900">Templates</h2>
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-sm">
           <tbody>
             {templates.map((t) => (
               <tr key={t.id} className="border-t border-brand-ice-100 transition hover:bg-brand-ice-50/60">
@@ -69,11 +79,19 @@ export default function TemplatesPage() {
                 <td className="px-4 py-2.5 text-brand-navy-700/60">{t.canvasWidth}×{t.canvasHeight}px</td>
                 <td className="px-4 py-2.5 text-brand-navy-700/60">QR box {t.qr.x},{t.qr.y} size {t.qr.size}</td>
                 <td className="px-4 py-2.5 text-brand-navy-700/60">serial {t.serial.enabled ? 'on' : 'off'}</td>
+                <td className="px-4 py-2.5 text-right">
+                  {can('canManageEvents') && (
+                    <button onClick={() => remove(t)} className="rounded-md border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50">
+                      Delete
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}
             {templates.length === 0 && <tr><td className="px-4 py-6 text-center text-brand-navy-700/50">No templates yet.</td></tr>}
           </tbody>
         </table>
+        </div>
         <p className="border-t border-brand-ice-100 px-4 py-3 text-xs text-brand-navy-700/40">
           To assign a template to an event, use the API <code>PATCH /api/admin/events/&#123;id&#125;</code> with templateId, or contact the developer console. (Assignment UI coming with template preview.)
         </p>

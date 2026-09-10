@@ -94,7 +94,8 @@ export default function LogsPage() {
         </div>
       )}
       <div className="overflow-hidden rounded-xl border border-brand-ice-200 bg-white shadow-sm">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] text-sm">
           <thead>
             <tr className="border-b border-brand-ice-200 bg-brand-ice-50 text-left text-xs font-semibold uppercase tracking-wide text-brand-navy-700/50">
               <th className="px-4 py-2.5">Time</th>
@@ -117,6 +118,7 @@ export default function LogsPage() {
             {visible.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center text-brand-navy-700/50">No scan logs yet.</td></tr>}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

@@ -5,6 +5,8 @@ export type AuditAction =
   | 'ADMIN_CREATED'
   | 'ADMIN_UPDATED'
   | 'ADMIN_DISABLED'
+  | 'ADMIN_DELETED'
+  | 'TEMPLATE_DELETED'
   | 'EVENT_CREATED'
   | 'EVENT_UPDATED'
   | 'EVENT_ARCHIVED'

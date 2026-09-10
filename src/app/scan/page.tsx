@@ -213,6 +213,28 @@ export default function ScannerPage() {
     try {
       const { default: QrScannerCtor } = await import('qr-scanner');
 
+      // qr-scanner opportunistically uses the browser's native
+      // BarcodeDetector API when the device reports support for it
+      // (https://web.dev/shape-detection/). On a real, non-trivial slice of
+      // Android/Chrome installs that native detector self-reports as
+      // supported while its underlying Google Play Services ML Kit module
+      // is missing/broken on-device — detect() then just keeps returning
+      // ZERO results forever, completely silently: no error, no rejected
+      // promise, camera preview looks perfectly normal. That is the exact,
+      // previously invisible root cause of "camera live, nothing ever
+      // scans" — it happens INSIDE the library's own engine selection,
+      // beneath any of our code, which is why swapping wrapper libraries
+      // never fixed it. Forcing the library's own bundled jsQR/ZXing worker
+      // decoder — the same reliable, cross-device-consistent decode path
+      // the confirmed-working reference implementation relies on — removes
+      // this failure mode for good.
+      // Accessing a private static field: intentional (see comment above) —
+      // ts-expect-error rather than a silent cast, so this loudly breaks if
+      // a future qr-scanner version renames/removes the field, forcing us
+      // to re-verify the workaround instead of it quietly rotting.
+      // @ts-expect-error intentional access to qr-scanner's private kill-switch for native BarcodeDetector
+      QrScannerCtor._disableBarcodeDetector = true;
+
       const video = videoRef.current;
       if (!video) throw new Error('Video element not mounted');
 

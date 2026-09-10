@@ -9,7 +9,7 @@ import {
 import { formatSerial, normalizeSerial, hyphenateSerial, hyphenateSerialCandidates } from '@/lib/invitation/serial';
 
 describe('resolveSerialGeometry', () => {
-  it('ALWAYS resolves to the approved near-QR plate placement (owner decision)', () => {
+  it('ALWAYS resolves to the approved near-QR placement (owner decision)', () => {
     // Stored template serials from the pre-plate era carry the invisible
     // bottom-edge placement — honoring them would keep printing cards
     // whose serial nobody can see. Even an enabled stored serial is
@@ -29,7 +29,7 @@ describe('resolveSerialGeometry', () => {
     });
     const approved = deriveTemplateGeometry(REFERENCE_CANVAS.width, REFERENCE_CANVAS.height).serial;
     expect(r).toEqual(approved);
-    expect(r.plate).toBe(true);
+    expect(r.plate).toBe(false);
   });
 
   it('falls back to the approved default when the stored template predates serial support', () => {
@@ -55,20 +55,21 @@ describe('resolveSerialGeometry', () => {
     expect(r).toEqual(deriveTemplateGeometry(REFERENCE_CANVAS.width, REFERENCE_CANVAS.height).serial);
   });
 
-  it('places the serial directly under the QR, centered on it, on a white plate', () => {
+  it('places the serial directly under the QR, centered on it, gold text with no plate', () => {
     const g = deriveTemplateGeometry(REFERENCE_CANVAS.width, REFERENCE_CANVAS.height);
     const qr = g.qr;
     const serial = g.serial;
     expect(serial.enabled).toBe(true);
-    expect(serial.plate).toBe(true);
+    expect(serial.plate).toBe(false);
+    expect(serial.color).toBe('#C5A059');
     // horizontally centered on the QR box
     expect(serial.x).toBe(Math.round(qr.x + qr.size / 2));
-    // starts clearly BELOW the QR box (plate never overlaps the code)
+    // starts clearly BELOW the QR box
     expect(serial.y).toBeGreaterThan(qr.y + qr.size);
     // stays inside the canvas
     expect(serial.y).toBeLessThan(REFERENCE_CANVAS.height);
-    // large enough to be read by a human
-    expect(serial.fontSize).toBeGreaterThanOrEqual(30);
+    // half the previous (30px-min) size, still legible
+    expect(serial.fontSize).toBeGreaterThanOrEqual(14);
   });
 
   it('keeps the approved QR placement untouched on the reference canvas', () => {

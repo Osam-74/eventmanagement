@@ -32,15 +32,16 @@ export function serialGeometryBelowQr(
 ): TemplateGeometry['serial'] {
   return {
     enabled: true,
-    // Directly UNDER the QR, centered on it, on a white plate: the
-    // traceable serial must be impossible to miss (owner decision).
-    // The old placement — tiny dark-gray text at the extreme bottom
-    // edge — was invisible on the approved artwork.
+    // Directly UNDER the QR, centered on it. Owner decision (2026-09-10):
+    // half the previous size, gold text, no background plate — the
+    // approved artwork already carries a "— Access code —" label in gold,
+    // so the serial now matches that same gold treatment instead of a
+    // separate white tag.
     x: Math.round(qr.x + qr.size / 2),
-    y: Math.round(qr.y + qr.size + 0.075 * canvasHeight),
-    fontSize: Math.round(0.032 * canvasWidth),
-    color: '#111111',
-    plate: true,
+    y: Math.round(qr.y + qr.size + 0.0709 * canvasHeight), // nudged up ~6px (owner request 2026-09-10, at the 1470-tall reference)
+    fontSize: Math.round(0.016 * canvasWidth),
+    color: '#C5A059',
+    plate: false,
   };
 }
 
@@ -81,11 +82,9 @@ export function resolveSerialGeometry(template: {
   qr: { x: number; y: number; size: number };
   serial?: { enabled?: boolean; x: number; y: number; fontSize: number; color: string; plate?: boolean };
 }): TemplateGeometry['serial'] {
-  // ALWAYS use the approved near-QR plate placement, anchored to the real
-  // qr box. Stored template serials from the pre-plate era carry the
-  // invisible bottom-edge placement (or, if computed independently of qr,
-  // could drift away from the QR entirely) — honoring them would keep
-  // printing cards whose serial nobody can see or that lands in the wrong
-  // spot, which defeats the traceability guarantee.
+  // ALWAYS use the approved near-QR placement, anchored to the real qr box.
+  // Stored template serials from an earlier era carry the old size/color/
+  // plate — honoring them would keep printing cards with the outdated
+  // look instead of the current approved gold, half-size, plate-free style.
   return serialGeometryBelowQr(template.qr, template.canvasWidth, template.canvasHeight);
 }

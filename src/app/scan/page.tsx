@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type QrScanner from 'qr-scanner';
+import type { Html5Qrcode } from 'html5-qrcode';
 import { shouldSubmitToken } from '@/lib/client/scanClient';
 
 type SessionInfo = {
@@ -21,6 +21,7 @@ type ScanResult =
   | { kind: 'error'; message: string };
 
 const COOLDOWN_MS = 2500;
+const SCANNER_CONTAINER_ID = 'qr-reader';
 
 function beep(good: boolean) {
   try {
@@ -53,15 +54,13 @@ export default function ScannerPage() {
   const [cameraError, setCameraError] = useState('');
   const [stalled, setStalled] = useState(false);
 
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const scannerRef = useRef<QrScanner | null>(null);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
   const busyRef = useRef(false);
   const lastTokenRef = useRef<{ token: string; at: number }>({ token: '', at: 0 });
   // Proof-of-life for the decode loop, NOT just camera permission: every
-  // processed frame (found or not) bumps this. A watchdog below compares it
-  // against "now" — if frames stop landing this catches the exact bug we
-  // were chasing (video visibly live, decode engine silently dead/never
-  // initialized) instead of leaving the UI stuck showing "scanning" forever.
+  // processed frame (found or not) bumps this, via html5-qrcode's own public
+  // per-frame error callback — no private-field pokes, no reimplementing its
+  // internals. If frames stop landing for a while we restart the engine.
   const lastFrameAtRef = useRef<number>(0);
   const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const restartingRef = useRef(false);
@@ -125,15 +124,21 @@ export default function ScannerPage() {
   useEffect(() => {
     return () => {
       stopWatchdog();
-      scannerRef.current?.destroy();
+      const s = scannerRef.current;
       scannerRef.current = null;
+      if (s) {
+        s.stop()
+          .catch(() => undefined)
+          .finally(() => s.clear());
+      }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function signOut() {
     await fetch('/api/usher/signout', { method: 'POST' }).catch(() => undefined);
     stopWatchdog();
-    scannerRef.current?.stop();
+    scannerRef.current?.stop().catch(() => undefined);
     setSession(null);
     setScanning(false);
     router.replace('/usher/login');
@@ -153,6 +158,12 @@ export default function ScannerPage() {
     busyRef.current = true;
     lastTokenRef.current = { token, at: now };
     try {
+      // The decoded QR text is NEVER trusted on its own — this call is the
+      // one and only security boundary. The server re-derives the HMAC
+      // digest from `token`, checks it against the stored invitation inside
+      // a Firestore transaction (one admit ever, race-safe), and requires a
+      // live, authenticated usher session cookie. A scanner swap on the
+      // client changes none of that.
       const res = await fetch('/api/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -200,55 +211,57 @@ export default function ScannerPage() {
     }
   }
 
-  // Starts (or restarts) the decode engine and arms a watchdog that proves
-  // frames are actually being PROCESSED, not just that the camera opened.
-  // This is the real fix for "camera looks live but nothing ever scans":
-  // that symptom means getUserMedia succeeded (video renders) while the
-  // decode loop never produced a single callback — previously invisible,
-  // now caught and auto-recovered within a few seconds.
+  // Starts (or restarts) the decode engine using html5-qrcode's own
+  // plain, documented happy path — the exact same construction (fps 10,
+  // 250px qrbox, aspectRatio 1.0, facingMode "environment", start/pause/
+  // resume) proven to work reliably elsewhere. No private-field pokes, no
+  // custom video/canvas plumbing: html5-qrcode owns its own <video> inside
+  // the container div, which is what the earlier custom-video approach
+  // (across two different libraries) never got right.
   async function startScanner(isRestart = false) {
     setStarting(true);
     if (!isRestart) setCameraError('');
     setStalled(false);
     try {
-      const { default: QrScannerCtor } = await import('qr-scanner');
-
-      const video = videoRef.current;
-      if (!video) throw new Error('Video element not mounted');
+      const { Html5Qrcode } = await import('html5-qrcode');
 
       // Any previous instance must be fully torn down before creating a new
-      // one — two QrScanner instances racing over the same <video> element
-      // is exactly the kind of state that LOOKS live but never resolves.
-      scannerRef.current?.destroy();
-      scannerRef.current = null;
+      // one — two engines racing over the same container is exactly the kind
+      // of state that LOOKS live but never resolves.
+      if (scannerRef.current) {
+        await scannerRef.current.stop().catch(() => undefined);
+        scannerRef.current.clear();
+        scannerRef.current = null;
+      }
+
+      const scanner = new Html5Qrcode(SCANNER_CONTAINER_ID, { verbose: false });
+      scannerRef.current = scanner;
 
       lastFrameAtRef.current = Date.now();
-      const scanner = new QrScannerCtor(
-        video,
-        (result) => {
+      await scanner.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: 250, aspectRatio: 1.0 },
+        (decodedText) => {
           lastFrameAtRef.current = Date.now();
-          submitToken(result.data);
+          // Pause while the server round-trip resolves so the same frame
+          // doesn't fire twice, then resume automatically — same pattern
+          // proven to work, just wired to our own submit/cooldown logic.
+          scanner.pause(true);
+          submitToken(decodedText);
+          setTimeout(() => {
+            try {
+              scanner.resume();
+            } catch {
+              /* scanner may have been stopped/torn down in the meantime */
+            }
+          }, COOLDOWN_MS);
         },
-        {
-          // Fires on EVERY processed frame that found no code — this is our
-          // proof-of-life signal, not noise to discard.
-          onDecodeError: () => {
-            lastFrameAtRef.current = Date.now();
-          },
-          highlightScanRegion: true,
-          highlightCodeOutline: true,
-          maxScansPerSecond: 15,
-          preferredCamera: 'environment',
-          returnDetailedScanResult: true,
+        () => {
+          // Fires on every processed frame where no code was found — our
+          // proof-of-life signal that the decode loop is actually running.
+          lastFrameAtRef.current = Date.now();
         }
       );
-      scannerRef.current = scanner;
-      await scanner.start();
-      // Forces the internal decode-engine promise to be awaited right now
-      // (hasFlash() reads it) so a broken engine (e.g. worker init failure)
-      // throws HERE, as a visible camera error, instead of hanging silently
-      // forever inside the per-frame decode loop.
-      await scanner.hasFlash().catch(() => undefined);
 
       setScanning(true);
       setResult(null);
@@ -265,9 +278,9 @@ export default function ScannerPage() {
         }
       }, 2000);
     } catch (e) {
-      // qr-scanner surfaces getUserMedia's DOMException (with .name) directly,
-      // or a plain string/Error when no camera exists — distinguish them so
-      // ushers get the RIGHT instruction, not a generic one.
+      // html5-qrcode surfaces getUserMedia's DOMException (with .name)
+      // directly, or a plain string/Error when no camera exists —
+      // distinguish them so ushers get the RIGHT instruction.
       const name = (e as { name?: string })?.name ?? String(e);
       if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
         setCameraError(
@@ -280,8 +293,11 @@ export default function ScannerPage() {
       } else {
         setCameraError('The camera opened but the scanner engine failed to start. Tap Start Scanner again, or use manual entry below.');
       }
-      scannerRef.current?.destroy();
-      scannerRef.current = null;
+      if (scannerRef.current) {
+        await scannerRef.current.stop().catch(() => undefined);
+        scannerRef.current.clear();
+        scannerRef.current = null;
+      }
       setScanning(false);
       stopWatchdog();
     } finally {
@@ -291,7 +307,7 @@ export default function ScannerPage() {
 
   async function stopScanner() {
     stopWatchdog();
-    scannerRef.current?.stop();
+    await scannerRef.current?.stop().catch(() => undefined);
     setScanning(false);
     setStalled(false);
   }
@@ -350,21 +366,14 @@ export default function ScannerPage() {
         )}
 
         <div className="mt-4">
-          {/* ALWAYS mounted (never display:none/unmounted): qr-scanner attaches
-              its live decode loop directly to this <video> element, so it must
-              already exist in the DOM before start() runs. muted+playsInline
-              are required for iOS Safari to actually play the stream inline
-              instead of forcing fullscreen (which breaks frame capture).
-              min-h ensures it never collapses to 0px before video metadata
-              loads — a zero-size element was one of the candidate causes of
-              "camera looks on but nothing scans" and costs nothing to rule out. */}
-          <video
-            id="qr-video"
-            ref={videoRef}
-            muted
-            playsInline
+          {/* html5-qrcode owns this container: it creates and manages its own
+              <video> element inside it. Must stay mounted (never
+              display:none) while a scan session is active. min-height stops
+              layout collapse before the camera stream attaches. */}
+          <div
+            id={SCANNER_CONTAINER_ID}
+            className="w-full overflow-hidden rounded-xl bg-stone-950"
             style={{ minHeight: '260px' }}
-            className="w-full rounded-xl bg-stone-950 object-cover"
           />
           {scanning && (
             <button onClick={stopScanner} className="mt-3 w-full rounded-lg border border-stone-600 py-2 text-sm">

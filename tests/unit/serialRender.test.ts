@@ -8,10 +8,22 @@ import { measureSerialWidth, serialToSvgPaths } from '@/lib/invitation/serialGly
  * The serial must actually appear as INK on the card. This regression guards
  * the production failure where SVG <text> rendered through fontconfig came
  * out BLANK on Vercel (no usable fonts in the serverless image) — every
- * card had a white plate with an invisible serial. The serial is now drawn
- * as vector paths, which need no fonts, so the ink assertion below must hold
- * on every host.
+ * card had an invisible serial. The serial is now drawn as vector paths,
+ * which need no fonts, so the ink assertion below must hold on every host.
+ *
+ * Ink detection is done by DELTA from the sampled background grey, not an
+ * absolute "dark pixel" threshold — the approved serial color is gold
+ * (#C5A059, owner decision 2026-09-10, no plate), which is a mid-tone and
+ * would never trip an absolute darkness check. A delta-based check still
+ * catches the real regression (glyphs silently not painted at all) on any
+ * background/ink color combination.
  */
+function countInkPixels(band: Buffer, backgroundGrey: number, delta = 40): number {
+  let ink = 0;
+  for (const v of band) if (Math.abs(v - backgroundGrey) > delta) ink++;
+  return ink;
+}
+
 describe('serial rendering on invitation cards', () => {
   it('measureSerialWidth returns a positive width for a real serial', () => {
     const w = measureSerialWidth('IS26-00042', 34, 3);
@@ -24,10 +36,11 @@ describe('serial rendering on invitation cards', () => {
     expect(() => serialToSvgPaths('IS26 00042', 100, 100, 34, 3, '#111111')).not.toThrow();
   });
 
-  it('renders a card whose serial band actually contains dark ink pixels', async () => {
+  it('renders a card whose serial band actually contains ink pixels distinct from the background', async () => {
     // plain white 1070x1470 template, approved geometry
+    const bgHex = '#ffffff';
     const template = await sharp({
-      create: { width: 1070, height: 1470, channels: 3, background: '#ffffff' },
+      create: { width: 1070, height: 1470, channels: 3, background: bgHex },
     })
       .jpeg()
       .toBuffer();
@@ -47,7 +60,7 @@ describe('serial rendering on invitation cards', () => {
     const scale = width / geometry.canvasWidth;
     const fontSize = geometry.serial.fontSize * scale;
     const sy = geometry.serial.y * scale;
-    // crop the serial band: from just above the plate top to below the baseline
+    // crop the serial band: from just above the text top to below the baseline
     const band = await sharp(buffer)
       .extract({
         left: Math.max(0, Math.round(geometry.serial.x * scale - fontSize * 8)),
@@ -59,13 +72,13 @@ describe('serial rendering on invitation cards', () => {
       .raw()
       .toBuffer();
 
-    let dark = 0;
-    for (const v of band) if (v < 80) dark++;
+    // background is pure white -> grey 255
+    const ink = countInkPixels(band, 255);
     // thousands of glyph ink pixels must be present in the band
-    expect(dark).toBeGreaterThan(200);
+    expect(ink).toBeGreaterThan(200);
   });
 
-  it('renders the serial band with ink even when the template is mid-grey (plate contrast)', async () => {
+  it('renders visible ink on a mid-grey template too (no plate — gold ink must still paint on any background)', async () => {
     const template = await sharp({
       create: { width: 1070, height: 1470, channels: 3, background: '#777777' },
     })
@@ -92,8 +105,8 @@ describe('serial rendering on invitation cards', () => {
       .greyscale()
       .raw()
       .toBuffer();
-    let dark = 0;
-    for (const v of band) if (v < 80) dark++;
-    expect(dark).toBeGreaterThan(200);
+    // #777777 greyscale ≈ 119
+    const ink = countInkPixels(band, 119);
+    expect(ink).toBeGreaterThan(200);
   });
 });

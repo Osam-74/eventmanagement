@@ -250,6 +250,23 @@ export default function ScannerPage() {
       const video = videoRef.current;
       if (!video) throw new Error('Video element not mounted');
 
+      // qr-scanner's own _getCameraStream() tries up to six getUserMedia
+      // constraint combinations internally and SILENTLY swallows every
+      // rejection along the way — DOMException, .name and all — only
+      // throwing the generic string "Camera not found." once all six have
+      // failed. That means a real NotAllowedError or NotFoundError from the
+      // browser never reaches our catch block with its .name intact, so
+      // ushers always got the generic "scanner engine failed to start"
+      // message instead of the correct permission/no-camera instruction.
+      // A direct preflight call surfaces the UNMODIFIED browser error
+      // before handing off to qr-scanner, then releases the track
+      // immediately — qr-scanner acquires its own stream right after as
+      // normal, so this is purely an error-surfacing fix, not a behavior
+      // change on the happy path.
+      const preflightStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      preflightStream.getTracks().forEach((t) => t.stop());
+      if (!current()) return;
+
       // Any previous instance must be fully torn down before creating a new
       // one — two QrScanner instances racing over the same <video> element
       // is exactly the kind of state that LOOKS live but never resolves.

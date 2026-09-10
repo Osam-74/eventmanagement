@@ -2,6 +2,10 @@
 
 import { useSelectedEvent, useEventSummary } from '@/lib/client/useAdmin';
 import { useAdminWidget } from '@/lib/client/useAdminWidget';
+import { adminJson } from '@/lib/client/api';
+import { useEffect, useState } from 'react';
+
+type EventListItem = { id: string; name: string; scanningEnabled?: boolean };
 
 type Activity = {
   recentScans: { id: string; result: string; serialNumber: string | null; usherName: string | null; gateId: string | null; scannedAt: string | null }[];
@@ -152,6 +156,56 @@ function ScanBadge({ result }: { result: string }) {
   return <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${b.cls}`}>{b.label}</span>;
 }
 
+/**
+ * Multiple events can be scanning-active at the same time — activation is
+ * per-event server state (src/lib/services/scanning.ts), and switching
+ * which event this dashboard is *viewing* never touches any event's
+ * scanningEnabled flag. This strip is the at-a-glance view across ALL of
+ * them, since the header pill only ever shows the currently-viewed one
+ * (owner request, 2026-09-10).
+ */
+function LiveEventsStrip() {
+  const { eventId, select } = useSelectedEvent();
+  const [events, setEvents] = useState<EventListItem[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () =>
+      adminJson<{ ok: boolean; events: EventListItem[] }>('/api/admin/events')
+        .then((r) => { if (!cancelled) setEvents(r.events ?? []); })
+        .catch(() => undefined);
+    load();
+    const id = setInterval(load, 15000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
+  const live = (events ?? []).filter((e) => e.scanningEnabled);
+  if (!events || live.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      <span className="text-xs font-medium uppercase tracking-wide text-brand-navy-700/40">
+        Live now ({live.length})
+      </span>
+      {live.map((e) => (
+        <button
+          key={e.id}
+          onClick={() => select(e.id)}
+          title={e.id === eventId ? 'Currently viewing' : 'Switch to this event'}
+          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 transition ${
+            e.id === eventId
+              ? 'bg-emerald-500 text-white ring-emerald-500'
+              : 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 hover:bg-emerald-100'
+          }`}
+        >
+          <span className={`h-1.5 w-1.5 rounded-full ${e.id === eventId ? 'bg-white' : 'bg-emerald-500'}`} />
+          {e.name}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { eventId } = useSelectedEvent();
   // The Activate/Deactivate control and the event's name/live status now
@@ -179,6 +233,8 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <LiveEventsStrip />
+
       {eventSummary.loading ? (
         <div className={card}><Skeleton rows={2} /></div>
       ) : eventSummary.error ? (

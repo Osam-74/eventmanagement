@@ -17,7 +17,7 @@ import {
   type EventSummary,
 } from '@/lib/client/useAdmin';
 
-type EventItem = { id: string; name: string; slug: string };
+type EventItem = { id: string; name: string; slug: string; scanningEnabled?: boolean };
 
 const NAV = [
   { href: '/admin', label: 'Dashboard' },
@@ -236,7 +236,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                       <option value="">Select event…</option>
                       {events.map((e) => (
                         <option key={e.id} value={e.id}>
-                          {e.name}
+                          {e.scanningEnabled ? '\u25CF ' : ''}{e.name}
                         </option>
                       ))}
                     </select>

@@ -1,6 +1,8 @@
 import type { Firestore } from 'firebase-admin/firestore';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { digestToken } from '@/lib/qr/digest';
+import { normalizeSerial, hyphenateSerial } from '@/lib/invitation/serial';
+import { isPlausibleToken } from '@/lib/qr/token';
 
 export type ScanOutcomeCode =
   | 'ACCEPTED'
@@ -74,6 +76,26 @@ async function performScanOnce(firestore: Firestore, input: ScanInput): Promise<
   const { usherId, eventId, token, clientRequestId, gateId, deviceInfo } = input;
   const digest = digestToken(token);
 
+  // Manual entry: ushers type the card's printed serial, which is NOT the
+  // QR credential the invitation doc is keyed by. Resolve a typed serial
+  // to its invitation doc BEFORE the transaction (both stored shapes:
+  // hyphenless new format + hyphenated legacy). The doc itself is still
+  // read and locked inside the transaction, so atomic one-time check-in
+  // is unchanged.
+  let invitationDocId: string = digest;
+  if (!isPlausibleToken(token)) {
+    const normalized = normalizeSerial(token);
+    if (normalized.length >= 4) {
+      const forms = [normalized, hyphenateSerial(normalized) ?? normalized];
+      const snap = await firestore
+        .collection('invitations')
+        .where('serialNumber', 'in', forms)
+        .limit(1)
+        .get();
+      if (!snap.empty) invitationDocId = snap.docs[0].id;
+    }
+  }
+
   return firestore.runTransaction(async (tx) => {
     // ---- reads (all before writes) ----
     const usherRef = firestore.collection('ushers').doc(usherId);
@@ -91,12 +113,12 @@ async function performScanOnce(firestore: Firestore, input: ScanInput): Promise<
     }
     const event = eventSnap.data()!;
 
-    const invitationRef = firestore.collection('invitations').doc(digest);
+    const invitationRef = firestore.collection('invitations').doc(invitationDocId);
     const invitationSnap = await tx.get(invitationRef);
 
     const baseLog = {
       eventId,
-      tokenDigest: digest,
+      tokenDigest: invitationSnap.exists ? invitationSnap.id : digest,
       invitationSerialNumber: null as string | null,
       result: 'invalid' as string,
       usherId,

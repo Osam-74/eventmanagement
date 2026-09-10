@@ -49,14 +49,15 @@ describe('token digests', () => {
 });
 
 describe('serial numbers', () => {
-  it('formats as <CODE>-<5 digits>', () => {
-    expect(formatSerial('ISWED', 1)).toBe('ISWED-00001');
-    expect(formatSerial('iswed', 42)).toBe('ISWED-00042');
-    expect(formatSerial('ISWED', 12345)).toBe('ISWED-12345');
+  it('formats as <CODE><5 digits> — one continuous token, no hyphen (owner decision)', () => {
+    expect(formatSerial('ISWED', 1)).toBe('ISWED00001');
+    expect(formatSerial('iswed', 42)).toBe('ISWED00042');
+    expect(formatSerial('ISWED', 12345)).toBe('ISWED12345');
   });
-  it('normalizes search input', () => {
-    expect(normalizeSerial('  iswed-00042 ')).toBe('ISWED-00042');
+  it('normalizes any human typing to the canonical hyphenless form', () => {
+    expect(normalizeSerial('  iswed-00042 ')).toBe('ISWED00042');
     expect(normalizeSerial('iswed 00042')).toBe('ISWED00042');
+    expect(normalizeSerial('ISWED.00042')).toBe('ISWED00042');
   });
   it('derives event code from slug', () => {
     expect(eventCodeFromSlug('is-wedding-2026')).toBe('ISWED');

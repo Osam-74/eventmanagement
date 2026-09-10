@@ -1,5 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { chromium, type Browser, type BrowserContext, type Locator, type Page } from 'playwright';
+import { createHmac, randomBytes } from 'crypto';
+import { spawnSync } from 'child_process';
+import { initializeApp as adminInitializeApp, deleteApp as adminDeleteApp } from 'firebase-admin/app';
+import { getFirestore as adminGetFirestore } from 'firebase-admin/firestore';
+import QRCode from 'qrcode';
+import sharp from 'sharp';
 
 /**
  * E2E PWA + routing/authentication suite against the real production build
@@ -43,6 +49,69 @@ afterAll(async () => {
 /** Wait for a locator to become visible; fails the test if it never does. */
 async function expectVisible(locator: Locator, timeout = 15000) {
   await locator.waitFor({ state: 'visible', timeout });
+}
+
+/**
+ * Creates an invitation directly in the Firestore emulator and returns
+ * its raw QR credential + digest. Mirrors the generate route's data model
+ * (invitations are keyed by the HMAC digest of the QR token).
+ */
+async function seedE2EInvitation(serial: string, token = `IS26.${randomBytes(32).toString('base64url')}`) {
+  // Mirror global-setup's serverEnv resolution EXACTLY — the e2e `next
+  // start` server gets these same fallbacks, so digests computed here
+  // match the server's lookup keys. (Never read .env.local here: the
+  // vitest process doesn't load it, and a real key would mismatch the
+  // server's fallback test key.)
+  const key = process.env.QR_TOKEN_HMAC_KEY ?? 'e2e-test-secret-key-for-hmac-32bytes!!';
+  const projectId = process.env.FIREBASE_PROJECT_ID ?? 'demo-eventaccess';
+  const digest = createHmac('sha256', key).update(token, 'utf8').digest('hex');
+  // firebase-admin BYPASSES the emulator's deny-all security rules —
+  // the client SDK would be PERMISSION_DENIED (that's exactly why the
+  // production app is server-only).
+  const app = adminInitializeApp({ projectId }, `e2e-inv-${digest.slice(0, 8)}`);
+  const db = adminGetFirestore(app);
+  const ref = db.collection('invitations').doc(digest);
+  await ref.set({
+    eventId: EVENT_ID,
+    batchId: 'batch-e2e',
+    serialNumber: serial,
+    status: 'unused',
+    guestAllowance: 1,
+    imageStoragePath: `events/${EVENT_ID}/invitations/batch-e2e/${serial}.jpg`,
+    outputProfile: 'share',
+    generatedAt: new Date(),
+    generatedBy: 'e2e',
+    usedAt: null,
+    usedAtClientEstimate: null,
+    usedByUsherId: null,
+  });
+  return { app, db, ref, token, digest, serial };
+}
+
+const FFMPEG_OK = spawnSync('ffmpeg', ['-version']).status === 0;
+
+/**
+ * Renders the QR as a fake CAMERA FEED. Chromium's
+ * --use-file-for-fake-video-capture only reads Y4M video, so: sharp composes
+ * the still frame, then ffmpeg converts it to a 2s looping Y4M stream.
+ */
+async function renderQrFeed(token: string, path: string) {
+  // 400px QR centered on a 1280x720 white canvas — comfortably inside the
+  // scanner's 70% center decode region, mirroring a card held properly.
+  const qr = await QRCode.toBuffer(token, { errorCorrectionLevel: 'Q', margin: 0, width: 400, color: { dark: '#000000ff', light: '#ffffffff' } });
+  const qrPng = await sharp(qr).png().toBuffer();
+  const still = '/tmp/e2e-qr-feed.jpg';
+  await sharp({ create: { width: 1280, height: 720, channels: 3, background: '#ffffff' } })
+    .composite([{ input: qrPng, left: 440, top: 160 }])
+    .jpeg()
+    .toFile(still);
+  const r = spawnSync(
+    'ffmpeg',
+    ['-hide_banner', '-loglevel', 'error', '-loop', '1', '-i', still,
+     '-r', '30', '-t', '2', '-pix_fmt', 'yuv420p', '-y', path],
+    { stdio: 'pipe' }
+  );
+  if (r.status !== 0) throw new Error(`ffmpeg Y4M conversion failed: ${r.stderr}`);
 }
 
 /** Enter a PIN on the Flo-style PIN pad (taps the on-screen keypad). */
@@ -419,6 +488,99 @@ describe('camera start', () => {
       await ctx.close();
     } finally {
       await fakeCam.close();
+    }
+  });
+});
+
+describe('QR decode — the camera actually READS a code and checks it in', () => {
+  // The ultimate scanner regression: a real QR image is fed through
+  // Chromium's fake camera (--use-file-for-fake-device-capture) so the
+  // whole chain runs: getUserMedia → html5-qrcode decode → /api/scan
+  // transaction → ACCESS GRANTED. Guards against the "camera shows but
+  // nothing ever scans" failure mode (native BarcodeDetector path).
+  it.skipIf(!FFMPEG_OK)('points the camera at a card and gets ACCESS GRANTED automatically', async () => {
+    const inv = await seedE2EInvitation('E2E-00001');
+    const feedPath = '/tmp/e2e-qr-feed.y4m';
+    await renderQrFeed(inv.token, feedPath);
+
+    const cam = await chromium.launch({
+      args: [
+        '--use-fake-device-for-media-stream',
+        '--use-fake-ui-for-media-stream',
+        // NOTE: the flag is use-file-for-fake-VIDEO-capture (a wrong name is
+        // silently ignored → the default green rolling-ball feed decodes
+        // nothing) and it only reads Y4M, not JPEG/PNG.
+        `--use-file-for-fake-video-capture=${feedPath}`,
+      ],
+    });
+    try {
+      const ctx = await cam.newContext();
+      const p = await ctx.newPage();
+      await enterPin(p, USHER_PIN);
+      await p.waitForURL(`${BASE}/scan`, { timeout: 15000 });
+
+      await p.getByRole('button', { name: /Start Scanner/ }).click();
+      await expectVisible(p.locator('#qr-reader video'), 30000);
+
+      // decode → submit → server transaction → granted banner
+      await expectVisible(p.getByText('ACCESS GRANTED'), 30000);
+      await expectVisible(p.getByText(`No. ${inv.serial}`), 5000);
+
+      // the invitation is consumed in the emulator transaction
+      const snap = await inv.ref.get();
+      expect(snap.data()?.status).toBe('used');
+      await ctx.close();
+    } finally {
+      await cam.close();
+      await inv.ref.delete().catch(() => undefined);
+      await adminDeleteApp(inv.app).catch(() => undefined);
+    }
+  });
+});
+
+describe('manual serial entry — type the printed serial, get the verdict', () => {
+  it('Check button + serial with a hyphen resolves the invitation (legacy shape)', async () => {
+    const inv = await seedE2EInvitation('E2E-00002');
+    try {
+      // Earlier suites may have left this shared page logged in already.
+      await page.goto(`${BASE}/scan`);
+      await page.waitForTimeout(1500);
+      if (page.url().includes('/usher/login')) {
+        await enterPin(page, USHER_PIN);
+        await page.waitForURL(`${BASE}/scan`, { timeout: 15000 });
+      }
+
+      // manual entry is visible on the scan screen WITHOUT starting the camera
+      await expectVisible(page.locator('#manual-entry'), 10000);
+      await page.locator('#manual-entry').fill('E2E-00002');
+      await page.getByRole('button', { name: /^Check$/ }).click();
+      await expectVisible(page.getByText('ACCESS GRANTED'), 15000);
+      await expectVisible(page.getByText(`No. ${inv.serial}`), 5000);
+    } finally {
+      await inv.ref.delete().catch(() => undefined);
+      await adminDeleteApp(inv.app).catch(() => undefined);
+    }
+  });
+
+  it('hyphenless serial also works, and an unknown serial is DENIED', async () => {
+    const inv = await seedE2EInvitation('E2E-00003');
+    try {
+      // The previous test's Check is still inside the 2.5s submit cooldown —
+      // wait it out or this first submission is silently dropped.
+      await page.waitForTimeout(3000);
+      await page.locator('#manual-entry').fill('iswed00003'); // wrong serial → denied
+      await page.getByRole('button', { name: /^Check$/ }).click();
+      await expectVisible(page.getByText('DENIED'), 15000);
+
+      // submitToken enforces a 2.5s cooldown after every submission —
+      // wait it out so the next Check is actually sent.
+      await page.waitForTimeout(2600);
+      await page.locator('#manual-entry').fill('E2E00003'); // correct, hyphenless
+      await page.getByRole('button', { name: /^Check$/ }).click();
+      await expectVisible(page.getByText('ACCESS GRANTED'), 15000);
+    } finally {
+      await inv.ref.delete().catch(() => undefined);
+      await adminDeleteApp(inv.app).catch(() => undefined);
     }
   });
 });

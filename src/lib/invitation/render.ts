@@ -11,6 +11,7 @@ export type TemplateGeometry = {
     y: number;
     fontSize: number;
     color: string;
+    plate?: boolean;
   };
 };
 
@@ -67,12 +68,22 @@ export async function renderInvitationImage(opts: {
     const fontSize = Math.round(geometry.serial.fontSize * scale);
     const sx = Math.round(geometry.serial.x * scale);
     const sy = Math.round(geometry.serial.y * scale);
+    let content = `<text x="${sx}" y="${sy}" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="${fontSize}" font-weight="600" fill="${escapeXml(
+      geometry.serial.color
+    )}" text-anchor="middle" letter-spacing="${Math.round(fontSize * 0.08)}">${escapeXml(serial)}</text>`;
+    if (geometry.serial.plate) {
+      // White rounded plate guarantees the serial is legible on ANY
+      // artwork background (gold frame, dark motif, photo).
+      const plateW = Math.round(serial.length * fontSize * 0.64 + fontSize * 1.6);
+      const plateH = Math.round(fontSize * 1.7);
+      const plateX = Math.round(sx - plateW / 2);
+      const plateY = Math.round(sy - fontSize * 1.18);
+      content =
+        `<rect x="${plateX}" y="${plateY}" width="${plateW}" height="${plateH}" rx="${Math.round(plateH / 4)}" fill="#ffffff"/>` +
+        content;
+    }
     overlays.push({
-      input: Buffer.from(
-        `<svg width="${width}" height="${height}"><text x="${sx}" y="${sy}" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="${fontSize}" fill="${escapeXml(
-          geometry.serial.color
-        )}" text-anchor="middle" letter-spacing="${Math.round(fontSize * 0.08)}">${escapeXml(serial)}</text></svg>`
-      ),
+      input: Buffer.from(`<svg width="${width}" height="${height}">${content}</svg>`),
       left: 0,
       top: 0,
     });

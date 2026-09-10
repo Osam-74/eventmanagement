@@ -193,11 +193,30 @@ export default function ScannerPage() {
       // #qr-reader is ALWAYS mounted (below), so the library can attach its
       // video element and actually call getUserMedia — the browser permission
       // prompt only appears if the container exists at this moment.
-      const scanner = new Html5Qrcode('qr-reader', { verbose: false });
+      // useBarCodeDetectorIfSupported: false is critical on Android Chrome:
+      // the native BarcodeDetector path can silently detect NOTHING (camera
+      // shows, QR never fires) on several devices/versions — forcing the
+      // battle-tested pure-JS decoder makes detection reliable everywhere.
+      const scanner = new Html5Qrcode('qr-reader', {
+        verbose: false,
+        useBarCodeDetectorIfSupported: false,
+      });
       scannerRef.current = scanner;
-      const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+      // fps 15 = fast pickup; qrbox as a function keeps the scan region
+      // responsive (70% of the viewfinder) so ushers don't have to aim
+      // precisely — point at the card and it reads.
+      const config = {
+        fps: 15,
+        qrbox: (vw: number, vh: number) => {
+          const edge = Math.floor(Math.min(vw, vh) * 0.7);
+          return { width: edge, height: edge };
+        },
+      };
       const onScan = (decodedText: string) => submitToken(decodedText);
       try {
+        // NOTE: html5-qrcode requires this object to have EXACTLY ONE key
+        // ({facingMode} or {deviceId}) — adding width/height constraints
+        // here throws "should have exactly 1 key" and the camera never starts.
         await scanner.start({ facingMode: 'environment' }, config, onScan, () => undefined);
       } catch (e) {
         // Devices without a rear camera (e.g. laptops) can reject the
@@ -312,26 +331,48 @@ export default function ScannerPage() {
             >
               {starting ? 'Starting camera…' : '▶ Start Scanner'}
             </button>
-            <div className="mt-6 text-left">
-              <label htmlFor="manual-entry" className="text-sm text-stone-400">Manual entry (camera not working)</label>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const el = e.currentTarget.elements.namedItem('manual') as HTMLInputElement;
-                  if (el.value.trim()) submitToken(el.value.trim());
-                  el.value = '';
-                }}
-              >
-                <input
-                  name="manual"
-                  id="manual-entry"
-                  placeholder="IS26.xxxx…"
-                  className="mt-1 w-full rounded-lg border border-stone-600 bg-stone-800 px-3 py-2 text-white"
-                />
-              </form>
-            </div>
           </div>
-        ) : null}
+        ) : (
+          <p className="mt-2 text-center text-sm text-stone-400">
+            Point the camera at the invitation QR — it scans automatically.
+          </p>
+        )}
+
+        {/* Manual entry: always available, including while the camera runs.
+            Type the serial number printed on the card — with or without the
+            hyphen, any case; the server matches both stored serial shapes. */}
+        <div className="mt-6 text-left">
+          <label htmlFor="manual-entry" className="text-sm text-stone-400">
+            Manual entry — type the serial on the card
+          </label>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const el = e.currentTarget.elements.namedItem('manual') as HTMLInputElement;
+              if (el.value.trim()) submitToken(el.value.trim());
+              el.value = '';
+            }}
+          >
+            <div className="mt-1 flex gap-2">
+              <input
+                name="manual"
+                id="manual-entry"
+                placeholder="e.g. ISWED00042"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                autoComplete="off"
+                spellCheck={false}
+                className="w-full rounded-lg border border-stone-600 bg-stone-800 px-3 py-2 font-mono uppercase tracking-wide text-white"
+              />
+              <button
+                type="submit"
+                className="shrink-0 rounded-lg bg-stone-700 px-5 py-2 font-semibold text-white"
+              >
+                Check
+              </button>
+            </div>
+          </form>
+        </div>
 
         {result && (
           <div

@@ -7,6 +7,75 @@ import { performScan } from '@/lib/services/scan';
 const hasEmu = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
 const db = hasEmu ? makeDb() : null;
 
+
+describe.skipIf(!hasEmu)('manual serial entry (usher types the printed serial)', () => {
+  let usher: { id: string; pin: string; name: string };
+
+  beforeAll(async () => {
+    await seedEvent(db!.db, EV1);
+    await seedEvent(db!.db, EV2, { name: 'Other event', slug: 'other', code: 'OTHER' });
+    usher = await seedUsher(db!.db, {});
+  });
+  // NOTE: no afterAll cleanup here — the shared makeDb() instance above is
+  // cleaned up once by the first suite's afterAll.
+
+  const scan = (token: string) =>
+    performScan(db!.db, {
+      usherId: usher.id,
+      eventId: EV1,
+      token,
+      clientRequestId: `req-${Math.random().toString(36).slice(2)}`,
+    });
+
+  it('hyphenless serial typed by an usher matches a legacy hyphenated invitation', async () => {
+    const inv = await seedInvitation(db!.db, { serialNumber: 'ISWED-00100' });
+    const out = await scan('iswed00100');
+    expect(out.code).toBe('ACCEPTED');
+    expect(out.serialNumber).toBe('ISWED-00100');
+    const doc = await invitationDoc(db!.db, inv.digest);
+    expect(doc.status).toBe('used');
+  });
+
+  it('hyphenated serial matches a new hyphenless invitation', async () => {
+    const inv = await seedInvitation(db!.db, { serialNumber: 'ISWED00101' });
+    const out = await scan('ISWED-00101');
+    expect(out.code).toBe('ACCEPTED');
+    expect(out.serialNumber).toBe('ISWED00101');
+  });
+
+  it('whitespace and case variations all resolve', async () => {
+    await seedInvitation(db!.db, { serialNumber: 'ISWED-00102' });
+    const out = await scan('  iswed 00102  ');
+    expect(out.code).toBe('ACCEPTED');
+  });
+
+  it('unknown serial → INVALID, never fabricated as granted', async () => {
+    const out = await scan('ISWED99999');
+    expect(out.code).toBe('INVALID');
+  });
+
+  it('a serial belonging to another event is rejected as wrong event', async () => {
+    const inv = await seedInvitation(db!.db, { serialNumber: 'ISWED-00103', eventId: EV2 });
+    const out = await scan('ISWED00103');
+    expect(out.code).toBe('WRONG_EVENT');
+    expect((await invitationDoc(db!.db, inv.digest)).status).toBe('unused');
+  });
+
+  it('serial scan consumes the invitation exactly once (atomicity preserved)', async () => {
+    await seedInvitation(db!.db, { serialNumber: 'ISWED-00104' });
+    await scan('ISWED00104');
+    const second = await scan('ISWED00104');
+    expect(second.code).toBe('ALREADY_USED');
+    expect(second.serialNumber).toBe('ISWED-00104');
+  });
+
+  it('a real QR credential still scans directly (token path unchanged)', async () => {
+    const inv = await seedInvitation(db!.db, { serialNumber: 'ISWED-00105' });
+    const out = await scan(inv.token);
+    expect(out.code).toBe('ACCEPTED');
+  });
+});
+
 describe.skipIf(!hasEmu)('scan flow outcomes', () => {
   let usher: { id: string; pin: string; name: string };
 

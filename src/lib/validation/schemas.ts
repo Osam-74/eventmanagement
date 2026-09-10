@@ -93,7 +93,9 @@ export const allowRescanSchema = z.object({
 });
 
 export const scanSchema = z.object({
-  token: z.string().min(10).max(200),
+  // QR credentials ("IS26.<43 chars>") OR a typed serial number
+  // ("ISWED00042", 6+ chars for short event codes) — manual entry.
+  token: z.string().min(6).max(200),
   clientRequestId: z.string().min(6).max(80),
   gateId: z.string().max(40).optional().nullable(),
   deviceInfo: z.string().max(200).optional().nullable(),

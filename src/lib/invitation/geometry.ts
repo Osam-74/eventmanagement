@@ -10,7 +10,7 @@ export type TemplateGeometry = {
   canvasWidth: number;
   canvasHeight: number;
   qr: { x: number; y: number; size: number; xRatio: number; yRatio: number; widthRatio: number };
-  serial: { enabled: boolean; x: number; y: number; fontSize: number; color: string };
+  serial: { enabled: boolean; x: number; y: number; fontSize: number; color: string; plate?: boolean };
 };
 
 /** Scales the approved normalized placement to the actual master artwork dimensions. */
@@ -28,10 +28,15 @@ export function deriveTemplateGeometry(canvasWidth: number, canvasHeight: number
     },
     serial: {
       enabled: true,
-      x: Math.round(canvasWidth / 2),
-      y: Math.round(canvasHeight - canvasHeight * 0.02),
-      fontSize: Math.round(canvasWidth * 0.024),
-      color: '#4a4a4a',
+      // Directly UNDER the QR, centered on it, on a white plate: the
+      // traceable serial must be impossible to miss (owner decision).
+      // The old placement — tiny dark-gray text at the extreme bottom
+      // edge — was invisible on the approved artwork.
+      x: Math.round((QR_X_RATIO + QR_W_RATIO / 2) * canvasWidth),
+      y: Math.round(QR_Y_RATIO * canvasHeight + QR_W_RATIO * canvasWidth + 0.075 * canvasHeight),
+      fontSize: Math.round(0.032 * canvasWidth),
+      color: '#111111',
+      plate: true,
     },
   };
 }
@@ -51,10 +56,11 @@ export const REFERENCE_QR_BOX = { x: 418, y: 975, size: 236 } as const;
 export function resolveSerialGeometry(template: {
   canvasWidth: number;
   canvasHeight: number;
-  serial?: { enabled?: boolean; x: number; y: number; fontSize: number; color: string };
+  serial?: { enabled?: boolean; x: number; y: number; fontSize: number; color: string; plate?: boolean };
 }): TemplateGeometry['serial'] {
-  if (template.serial && template.serial.enabled) {
-    return template.serial as TemplateGeometry['serial'];
-  }
+  // ALWAYS use the approved near-QR plate placement. Stored template
+  // serials from the pre-plate era carry the invisible bottom-edge
+  // placement — honoring them would keep printing cards whose serial
+  // nobody can see, which defeats the traceability guarantee.
   return deriveTemplateGeometry(template.canvasWidth, template.canvasHeight).serial;
 }

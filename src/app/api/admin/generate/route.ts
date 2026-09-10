@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
   const eventSnap = await eventRef.get();
   if (!eventSnap.exists) return badRequest('Event not found');
   const event = eventSnap.data()!;
-  if (event.lifecycleStatus === 'closed' || event.lifecycleStatus === 'archived') {
+  if (event.lifecycleStatus === 'closed' || event.lifecycleStatus === 'archived' || event.deleted === true) {
     return badRequest('Event is closed/archived; generation is disabled.');
   }
   if (!event.templateId) return badRequest('Assign an invitation template to this event first.');

@@ -22,7 +22,7 @@ export async function toggleScanning(
   const event = snap.data()!;
 
   const lifecycleStatus = event.lifecycleStatus as string;
-  const effective = enabled && lifecycleStatus !== 'closed' && lifecycleStatus !== 'archived';
+  const effective = enabled && lifecycleStatus !== 'closed' && lifecycleStatus !== 'archived' && event.deleted !== true;
 
   await ref.update({
     scanningEnabled: effective,

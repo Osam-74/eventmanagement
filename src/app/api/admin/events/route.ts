@@ -12,17 +12,28 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   const res = await requirePermission(req, 'canManageEvents');
   if ('error' in res) return res.error;
+  // Archived (deleted) events are dropped from every normal list/selector —
+  // including the global event switcher in the admin layout, so a deleted
+  // event's cards simply become unreachable through the UI. Pass
+  // ?archived=true to fetch the Archive tab's contents instead. Filtered
+  // in-memory (not a Firestore `where`) so pre-existing event docs with no
+  // `deleted` field at all are correctly treated as "not archived".
+  const wantArchived = new URL(req.url).searchParams.get('archived') === 'true';
   const snap = await db().collection('events').orderBy('createdAt', 'desc').limit(100).get();
-  const events = snap.docs.map((d) => {
-    const data = d.data();
-    return {
-      id: d.id,
-      ...data,
-      eventDate: data.eventDate?.toDate?.()?.toISOString?.() ?? null,
-      scanningEnabledAt: data.scanningEnabledAt?.toDate?.()?.toISOString?.() ?? null,
-      createdAt: data.createdAt?.toDate?.()?.toISOString?.() ?? null,
-    };
-  });
+  const events = snap.docs
+    .map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        ...data,
+        eventDate: data.eventDate?.toDate?.()?.toISOString?.() ?? null,
+        scanningEnabledAt: data.scanningEnabledAt?.toDate?.()?.toISOString?.() ?? null,
+        createdAt: data.createdAt?.toDate?.()?.toISOString?.() ?? null,
+        deletedAt: data.deletedAt?.toDate?.()?.toISOString?.() ?? null,
+        deleted: data.deleted === true,
+      };
+    })
+    .filter((e) => (wantArchived ? e.deleted : !e.deleted));
   return NextResponse.json({ ok: true, events });
 }
 
@@ -54,6 +65,9 @@ export async function POST(req: NextRequest) {
     totalUsed: 0,
     totalRevoked: 0,
     rescanAllowedCount: 0,
+    deleted: false,
+    deletedAt: null,
+    deletedBy: null,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });

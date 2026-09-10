@@ -33,6 +33,10 @@ export const updateEventSchema = z.object({
   templateId: z.string().min(4).optional().nullable(),
 });
 
+export const permanentlyDeleteEventSchema = z.object({
+  confirmSlug: z.string().min(1),
+});
+
 export const toggleScanningSchema = z.object({
   enabled: z.boolean(),
   confirm: z.literal(true),

@@ -129,7 +129,7 @@ async function performScanOnce(firestore: Firestore, input: ScanInput): Promise<
       deviceInfo: deviceInfo ?? null,
     };
 
-    if (event.lifecycleStatus === 'closed' || event.lifecycleStatus === 'archived') {
+    if (event.lifecycleStatus === 'closed' || event.lifecycleStatus === 'archived' || event.deleted === true) {
       tx.create(firestore.collection('scanLogs').doc(), { ...baseLog, result: 'event_closed' });
       return { code: 'EVENT_CLOSED', message: 'EVENT NOT OPEN' } as ScanOutcome;
     }

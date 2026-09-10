@@ -162,7 +162,7 @@ export default function InvitationsPage() {
         <table className="w-full min-w-[720px] text-sm">
           <thead>
             <tr className="border-b border-brand-ice-200 bg-brand-ice-50 text-left text-xs font-semibold uppercase tracking-wide text-brand-navy-700/50">
-              <th className="px-4 py-3">Serial</th>
+              <th className="px-4 py-3">Serial / Tag</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Uses</th>
               <th className="px-4 py-3">Scanned by</th>

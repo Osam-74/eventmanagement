@@ -8,7 +8,11 @@ import { useEffect, useState } from 'react';
 type EventListItem = { id: string; name: string; scanningEnabled?: boolean };
 
 type Activity = {
-  recentScans: { id: string; result: string; serialNumber: string | null; usherName: string | null; gateId: string | null; scannedAt: string | null }[];
+  recentScans: {
+    id: string; result: string; serialNumber: string | null; tag: string | null;
+    usageCount: number | null; usageLimit: number | null;
+    usherName: string | null; gateId: string | null; scannedAt: string | null;
+  }[];
   scanCounts: { accepted: number; rejected: number };
   latestScanAt: string | null;
 };
@@ -122,6 +126,35 @@ function ProgressRing({ value, total }: { value: number; total: number }) {
         strokeDasharray={`${c * pct} ${c}`}
       />
     </svg>
+  );
+}
+
+/**
+ * Usher scan-count analytics (owner request, 2026-09-10): "the number of
+ * scanned cards for the ushers in form of bar chart" — a horizontal bar
+ * per usher, single accent color, sorted busiest-first. Reuses the same
+ * ushers widget already polled for the roster panel, so this adds zero
+ * extra network requests.
+ */
+function UsherBarChart({ ushers }: { ushers: Ushers['ushers'] }) {
+  const sorted = [...ushers].sort((a, b) => b.acceptedCount - a.acceptedCount);
+  const max = Math.max(1, ...sorted.map((u) => u.acceptedCount));
+  if (sorted.length === 0) return <p className="text-sm text-brand-navy-700/60">No ushers yet.</p>;
+  return (
+    <div className="max-h-72 space-y-2.5 overflow-auto pr-1">
+      {sorted.map((u) => (
+        <div key={u.id} className="flex items-center gap-3">
+          <span className="w-28 shrink-0 truncate text-xs text-brand-navy-700/70" title={u.name}>{u.name}</span>
+          <div className="h-2.5 flex-1 rounded-full bg-brand-ice-100">
+            <div
+              className="h-2.5 rounded-full bg-brand-blue-500 transition-[width]"
+              style={{ width: `${(u.acceptedCount / max) * 100}%` }}
+            />
+          </div>
+          <span className="w-8 shrink-0 text-right text-xs font-semibold text-brand-navy-900">{u.acceptedCount}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -329,7 +362,20 @@ export default function DashboardPage() {
                   <tbody>
                     {activityWidget.data?.recentScans.map((s) => (
                       <tr key={s.id} className="border-t border-brand-ice-100">
-                        <td className="py-1.5 font-semibold text-brand-navy-900">{s.serialNumber ?? '—'}</td>
+                        <td className="py-1.5">
+                          {/* Tag reflected here too (owner request, 2026-09-10): a
+                              family/VIP card reads as its tag, not a bare serial —
+                              matching the Invitations page's Serial / Tag column. */}
+                          <p className="font-semibold text-brand-navy-900">{s.tag ?? s.serialNumber ?? '—'}</p>
+                          {s.tag && s.serialNumber && (
+                            <p className="font-mono text-xs text-brand-navy-700/45">{s.serialNumber}</p>
+                          )}
+                          {typeof s.usageCount === 'number' && s.usageLimit !== 1 && (
+                            <p className="text-xs text-brand-navy-700/50">
+                              Use {s.usageCount}{s.usageLimit === null ? '' : ` of ${s.usageLimit}`}
+                            </p>
+                          )}
+                        </td>
                         <td className="py-1.5 text-brand-navy-700/55">{s.usherName ?? '—'}</td>
                         <td className="py-1.5"><ScanBadge result={s.result} /></td>
                         <td className="py-1.5 text-right text-brand-navy-700/50">{fmt(s.scannedAt)}</td>
@@ -344,6 +390,18 @@ export default function DashboardPage() {
             </>
           )}
         </div>
+      </div>
+
+      {/* Scan analytics — independent widget, same ushers data already polled above */}
+      <div className={card}>
+        <h2 className="mb-3 font-semibold">Scan analytics — accepted scans per usher</h2>
+        {ushersWidget.loading ? (
+          <Skeleton rows={4} />
+        ) : ushersWidget.error ? (
+          <ErrorCard message={ushersWidget.error} onRetry={ushersWidget.retry} />
+        ) : (
+          <UsherBarChart ushers={ushersWidget.data?.ushers ?? []} />
+        )}
       </div>
 
       {/* Latest batches — independent widget */}

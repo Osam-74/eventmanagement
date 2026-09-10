@@ -131,8 +131,15 @@ export async function updateAdminAccount(
   if (displayName) update.displayName = displayName;
 
   if (permissions) {
+    // Partial update: the admins-page UI PATCHes ONE permission at a time
+    // (a single checkbox toggle), so only touch keys actually present in
+    // this request — anything omitted must keep its existing merged value.
+    // (Previously this defaulted every omitted key to `false`, so toggling
+    // one permission silently wiped out every other permission already
+    // granted — an admin could effectively only ever hold one at a time.)
     const merged = { ...(target.permissions as Record<string, boolean>) };
     for (const p of ALL_PERMISSIONS) {
+      if (!(p in permissions)) continue;
       const wants = Boolean(permissions[p]);
       if (wants && !actorHasPermission(actor, p)) continue; // anti-escalation
       merged[p] = wants;

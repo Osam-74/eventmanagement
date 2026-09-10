@@ -125,6 +125,7 @@ async function performScanOnce(firestore: Firestore, input: ScanInput): Promise<
       eventId,
       tokenDigest: invitationSnap.exists ? invitationSnap.id : digest,
       invitationSerialNumber: null as string | null,
+      invitationTag: null as string | null,
       result: 'invalid' as string,
       usherId,
       usherNameSnapshot: usherName,
@@ -152,7 +153,10 @@ async function performScanOnce(firestore: Firestore, input: ScanInput): Promise<
     const invitation = invitationSnap.data()!;
     const serialNumber = invitation.serialNumber as string;
     const tag = (invitation.tag as string | null) ?? null;
-    const logWithSerial = { ...baseLog, invitationSerialNumber: serialNumber };
+    // Carried onto every scanLog from here on (owner request, 2026-09-10):
+    // the dashboard's recent-scans feed needs the tag so a family/VIP card
+    // reads as "FAMILY" there too, not just on the Invitations page.
+    const logWithSerial = { ...baseLog, invitationSerialNumber: serialNumber, invitationTag: tag };
 
     if (invitation.eventId !== eventId) {
       tx.create(firestore.collection('scanLogs').doc(), { ...logWithSerial, result: 'wrong_event' });
@@ -176,7 +180,7 @@ async function performScanOnce(firestore: Firestore, input: ScanInput): Promise<
     const exhausted = invitation.status === 'used' || (usageLimit !== null && usageCount >= usageLimit);
 
     if (exhausted) {
-      tx.create(firestore.collection('scanLogs').doc(), { ...logWithSerial, result: 'already_used' });
+      tx.create(firestore.collection('scanLogs').doc(), { ...logWithSerial, result: 'already_used', usageCountAtScan: usageCount, usageLimitAtScan: usageLimit });
       const firstUsedAt = (invitation.firstUsedAt as Timestamp | null)?.toDate?.() ?? (invitation.usedAt as Timestamp | null)?.toDate?.();
       return {
         code: 'ALREADY_USED',
@@ -223,7 +227,7 @@ async function performScanOnce(firestore: Firestore, input: ScanInput): Promise<
       // used - revoked" arithmetic correct even with multi-use cards.
       ...(willExhaust ? { totalUsed: FieldValue.increment(1) } : {}),
     });
-    tx.create(firestore.collection('scanLogs').doc(), { ...logWithSerial, result: 'accepted' });
+    tx.create(firestore.collection('scanLogs').doc(), { ...logWithSerial, result: 'accepted', usageCountAtScan: newUsageCount, usageLimitAtScan: usageLimit });
 
     return {
       code: 'ACCEPTED',

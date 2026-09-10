@@ -89,6 +89,53 @@ describe.skipIf(!hasEmu)('administrator privilege escalation', () => {
     expect(doc.permissions.canManageUshers).toBe(true);
   });
 
+  it('granting a second permission in a later PATCH does not wipe out the first (owner-reported bug, 2026-09-10)', async () => {
+    await db!.db.collection('users').doc('multi-perm-uid').set({
+      email: 'multiperm@test.local', displayName: 'Multi Perm', accountType: 'ADMIN',
+      active: true, permissions: emptyPermissions(),
+    });
+    // Root Admin ticks one checkbox at a time, exactly like the admins page
+    // does on every onChange — each call sends only the ONE toggled key.
+    let res = await updateAdminAccount(db!.db, {
+      actor: ROOT_ACTOR, targetUid: 'multi-perm-uid',
+      permissions: { canGenerateInvites: true },
+    });
+    expect(res.ok).toBe(true);
+    res = await updateAdminAccount(db!.db, {
+      actor: ROOT_ACTOR, targetUid: 'multi-perm-uid',
+      permissions: { canManageUshers: true },
+    });
+    expect(res.ok).toBe(true);
+    res = await updateAdminAccount(db!.db, {
+      actor: ROOT_ACTOR, targetUid: 'multi-perm-uid',
+      permissions: { canViewAnalytics: true },
+    });
+    expect(res.ok).toBe(true);
+
+    const doc = (await db!.db.collection('users').doc('multi-perm-uid').get()).data()!;
+    // all three must be held simultaneously — none of the later PATCHes may
+    // clear an earlier one
+    expect(doc.permissions.canGenerateInvites).toBe(true);
+    expect(doc.permissions.canManageUshers).toBe(true);
+    expect(doc.permissions.canViewAnalytics).toBe(true);
+  });
+
+  it('unticking one permission does not affect an unrelated permission held at the same time', async () => {
+    await db!.db.collection('users').doc('multi-perm-uid-2').set({
+      email: 'multiperm2@test.local', displayName: 'Multi Perm 2', accountType: 'ADMIN',
+      active: true,
+      permissions: { ...emptyPermissions(), canGenerateInvites: true, canManageUshers: true },
+    });
+    const res = await updateAdminAccount(db!.db, {
+      actor: ROOT_ACTOR, targetUid: 'multi-perm-uid-2',
+      permissions: { canManageUshers: false }, // untick just this one
+    });
+    expect(res.ok).toBe(true);
+    const doc = (await db!.db.collection('users').doc('multi-perm-uid-2').get()).data()!;
+    expect(doc.permissions.canManageUshers).toBe(false); // this one cleared
+    expect(doc.permissions.canGenerateInvites).toBe(true); // untouched
+  });
+
   it('root admin can manage everything (sanity check of legitimate use)', async () => {
     await db!.db.collection('users').doc('target2-uid').set({
       email: 't2@test.local', displayName: 'T2', accountType: 'ADMIN',

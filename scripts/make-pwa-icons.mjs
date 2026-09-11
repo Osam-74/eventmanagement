@@ -1,9 +1,16 @@
 /**
- * Generates all PWA icon variants for "Event Access" from the single brand
- * mark at public/brand/mark.png (the real logo — dark-navy circular badge,
- * blue/teal "EA" arrow mark, transparent background; supplied by the owner
- * 2026-09-11, replacing the earlier placeholder "EA" text monogram this
- * script used to draw):
+ * Generates all PWA icon variants for "Event Access" from a dedicated
+ * source image at scripts/assets/pwa-icon-source.png (the owner's
+ * 2026-09-11 logo upload with cleanly-removed background transparency).
+ *
+ * IMPORTANT: this source is intentionally SEPARATE from
+ * public/brand/mark.png. That file is the on-screen logo rendered by
+ * <Image src="/brand/mark.png"> on the role picker, admin/usher login
+ * pages, and the admin sidebar — the owner explicitly asked (2026-09-11)
+ * that ONLY the PWA install icon / browser-tab icon change, and that the
+ * on-screen logo stay exactly as it was. Do not repoint this script at
+ * public/brand/mark.png, and do not repoint the on-screen <Image> tags at
+ * this file — they must keep evolving independently.
  *  - public/icons/icon-192x192.png        (any purpose — kept transparent)
  *  - public/icons/icon-512x512.png        (any purpose — kept transparent)
  *  - public/icons/maskable-192x192.png    (maskable — flattened onto MASKABLE_BG)
@@ -25,7 +32,7 @@
  */
 import sharp from 'sharp';
 
-const SOURCE = 'public/brand/mark.png';
+const SOURCE = 'scripts/assets/pwa-icon-source.png';
 // Matches manifest.webmanifest's background_color/theme_color and the
 // apple-touch-icon convention of a plain light backing behind the mark.
 const MASKABLE_BG = '#ffffff';

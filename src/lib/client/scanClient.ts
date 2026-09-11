@@ -20,3 +20,20 @@ export function shouldSubmitToken(state: SubmitGateState, token: string, now: nu
   if (state.lastToken === token && now - state.lastAt < DUPLICATE_WINDOW_MS) return false;
   return true;
 }
+
+/**
+ * Battery-saving auto-sleep (owner request, 2026-09-11): if the camera has
+ * been running with no scan actually PROCESSED (accepted or denied — a
+ * genuine attempt) for INACTIVITY_SLEEP_MS, the scanner should pause
+ * itself exactly as if the usher had tapped "Pause scanner". This is
+ * deliberately keyed off real scan attempts, not mere decode-loop frames
+ * (those land continuously regardless of whether anyone is actually being
+ * checked in) and not merely "the page is open" — a quiet stretch between
+ * arrivals is the whole point of sleeping the camera.
+ */
+export const INACTIVITY_SLEEP_MS = 5 * 60 * 1000; // 5 minutes
+
+export function shouldSleepFromInactivity(lastActivityAt: number, now: number, busy: boolean): boolean {
+  if (busy) return false; // never sleep out from under an in-flight scan
+  return now - lastActivityAt >= INACTIVITY_SLEEP_MS;
+}

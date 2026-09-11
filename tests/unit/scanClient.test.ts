@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shouldSubmitToken, DUPLICATE_WINDOW_MS, type SubmitGateState } from '@/lib/client/scanClient';
+import { shouldSubmitToken, shouldSleepFromInactivity, DUPLICATE_WINDOW_MS, INACTIVITY_SLEEP_MS, type SubmitGateState } from '@/lib/client/scanClient';
 
 const fresh = (over: Partial<SubmitGateState> = {}): SubmitGateState => ({
   busy: false,
@@ -35,5 +35,20 @@ describe('scanner submit gate', () => {
   it('allows a different token immediately after the previous one', () => {
     const state = fresh({ lastToken: 'IS26.abc', lastAt: T0 });
     expect(shouldSubmitToken(state, 'IS26.def', T0 + 100)).toBe(true);
+  });
+});
+
+describe('scanner inactivity auto-sleep (owner request, 2026-09-11)', () => {
+  it('stays awake before the inactivity window elapses', () => {
+    expect(shouldSleepFromInactivity(T0, T0 + INACTIVITY_SLEEP_MS - 1, false)).toBe(false);
+  });
+
+  it('sleeps once the inactivity window has fully elapsed with no scan processed', () => {
+    expect(shouldSleepFromInactivity(T0, T0 + INACTIVITY_SLEEP_MS, false)).toBe(true);
+    expect(shouldSleepFromInactivity(T0, T0 + INACTIVITY_SLEEP_MS + 60_000, false)).toBe(true);
+  });
+
+  it('never sleeps while a scan is in flight, even past the window', () => {
+    expect(shouldSleepFromInactivity(T0, T0 + INACTIVITY_SLEEP_MS + 60_000, true)).toBe(false);
   });
 });

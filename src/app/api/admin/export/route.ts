@@ -23,13 +23,14 @@ export async function GET(req: NextRequest) {
     .limit(10000)
     .get();
 
-  const rows = [['scannedAt', 'result', 'serialNumber', 'usherName', 'gateId', 'clientRequestId', 'deviceInfo']];
+  const rows = [['scannedAt', 'result', 'serialNumber', 'tag', 'usherName', 'gateId', 'clientRequestId', 'deviceInfo']];
   for (const doc of snap.docs) {
     const d = doc.data();
     rows.push([
       d.scannedAt?.toDate?.()?.toISOString?.() ?? '',
       d.result ?? '',
       d.invitationSerialNumber ?? '',
+      d.invitationTag ?? '',
       d.usherNameSnapshot ?? '',
       d.gateId ?? '',
       d.clientRequestId ?? '',

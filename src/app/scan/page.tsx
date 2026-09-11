@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type QrScanner from 'qr-scanner';
-import { shouldSubmitToken } from '@/lib/client/scanClient';
+import { shouldSubmitToken, shouldSleepFromInactivity } from '@/lib/client/scanClient';
 
 type SessionInfo = {
   usherName: string;
@@ -65,6 +65,11 @@ export default function ScannerPage() {
   // initialized) instead of leaving the UI stuck showing "scanning" forever.
   const lastFrameAtRef = useRef<number>(0);
   const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Battery-saving auto-sleep (owner request, 2026-09-11): bumped on every
+  // scan actually PROCESSED (accepted or denied), NOT on every decode-loop
+  // frame — a quiet camera pointed at nothing shouldn't count as "active".
+  const lastActivityAtRef = useRef<number>(Date.now());
+  const inactivityTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const generationRef = useRef(0);
   const mountedRef = useRef(false);
   const cooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -134,10 +139,32 @@ export default function ScannerPage() {
       if (cooldownRef.current) clearTimeout(cooldownRef.current);
       requestRef.current?.abort();
       stopWatchdog();
+      if (inactivityTimerRef.current) clearInterval(inactivityTimerRef.current);
       scannerRef.current?.destroy();
       scannerRef.current = null;
     };
   }, []);
+
+  // Battery-saving auto-sleep: while the camera is running, check every 15s
+  // for a full INACTIVITY_SLEEP_MS stretch with no scan actually processed.
+  // Reuses the exact same stopScanner() path as the manual "Pause scanner"
+  // button, so it lands in the identical, already-tested paused state (the
+  // "Start Scanner" button reappears normally — no new control needed).
+  useEffect(() => {
+    if (!scanning) return;
+    inactivityTimerRef.current = setInterval(() => {
+      if (shouldSleepFromInactivity(lastActivityAtRef.current, Date.now(), busyRef.current)) {
+        void stopScanner();
+        setCameraError('Scanner put to sleep after a few minutes of inactivity — no cards scanned. Tap Start Scanner to resume.');
+      }
+    }, 15000);
+    return () => {
+      if (inactivityTimerRef.current) {
+        clearInterval(inactivityTimerRef.current);
+        inactivityTimerRef.current = null;
+      }
+    };
+  }, [scanning]);
 
   async function signOut() {
     await stopScanner();
@@ -161,6 +188,7 @@ export default function ScannerPage() {
       return;
     }
     busyRef.current = true;
+    lastActivityAtRef.current = now;
     setProcessing(true);
     const scanner = scannerRef.current;
     const generation = generationRef.current;
@@ -321,6 +349,7 @@ export default function ScannerPage() {
       // sets decoderReady. hasFlash() checks the camera track, not the worker.
 
       setScanning(true);
+      lastActivityAtRef.current = Date.now();
 
       stopWatchdog();
       watchdogRef.current = setInterval(() => {

@@ -9,6 +9,7 @@ type ScanRow = {
   id: string;
   result: string;
   serialNumber: string | null;
+  tag: string | null;
   usherName: string | null;
   gateId: string | null;
   scannedAt: string | null;
@@ -100,7 +101,7 @@ export default function LogsPage() {
             <tr className="border-b border-brand-ice-200 bg-brand-ice-50 text-left text-xs font-semibold uppercase tracking-wide text-brand-navy-700/50">
               <th className="px-4 py-2.5">Time</th>
               <th className="px-4 py-2.5">Result</th>
-              <th className="px-4 py-2.5">Serial</th>
+              <th className="px-4 py-2.5">Serial / Tag</th>
               <th className="px-4 py-2.5">Usher</th>
               <th className="px-4 py-2.5">Gate</th>
             </tr>
@@ -110,7 +111,20 @@ export default function LogsPage() {
               <tr key={r.id} className="border-t border-brand-ice-100 transition hover:bg-brand-ice-50/60">
                 <td className="px-4 py-2.5 text-brand-navy-700/60">{fmt(r.scannedAt)}</td>
                 <td className={`px-4 py-2.5 font-medium ${RESULT_STYLE[r.result] ?? 'text-brand-navy-900'}`}>{r.result}</td>
-                <td className="px-4 py-2.5 font-mono text-brand-navy-900">{r.serialNumber ?? '—'}</td>
+                <td className="px-4 py-2.5 font-mono text-brand-navy-900">
+                  {/* Tag shown alongside the serial (owner request, 2026-09-11):
+                      when several serials scroll by, a tagged card (e.g. a
+                      FAMILY multi-use card) needs to visibly read as tagged,
+                      not look like just another one-off serial. */}
+                  {r.tag ? (
+                    <>
+                      <span className="rounded bg-brand-blue-500/10 px-1.5 py-0.5 text-xs font-semibold text-brand-blue-700">{r.tag}</span>
+                      {r.serialNumber && <span className="ml-1.5 text-xs text-brand-navy-700/45">{r.serialNumber}</span>}
+                    </>
+                  ) : (
+                    r.serialNumber ?? '—'
+                  )}
+                </td>
                 <td className="px-4 py-2.5 text-brand-navy-800">{r.usherName ?? '—'}</td>
                 <td className="px-4 py-2.5 text-brand-navy-700/60">{r.gateId ?? '—'}</td>
               </tr>

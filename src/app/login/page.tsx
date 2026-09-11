@@ -86,7 +86,10 @@ export default function LoginPage() {
     setResetBusy(true);
     setError('');
     try {
-      await sendPasswordResetEmail(getFirebaseAuth(), email);
+      // continueUrl (owner request, 2026-09-11): Firebase's own hosted
+      // reset-password page then offers a link straight back here once
+      // the password is set, instead of dead-ending the admin.
+      await sendPasswordResetEmail(getFirebaseAuth(), email, { url: `${window.location.origin}/login` });
       // Firebase replies identically for unknown addresses where possible;
       // when it does not, we still show a uniform success/failure so the UI
       // never confirms whether an account exists.

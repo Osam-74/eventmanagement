@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { sendPasswordResetEmail } from 'firebase/auth';
 import { adminJson } from '@/lib/client/api';
+import { getFirebaseAuth } from '@/lib/firebase/client';
 import { useAdmin } from '@/lib/client/useAdmin';
 
 type AdminItem = {
@@ -30,6 +32,8 @@ export default function AdminsPage() {
   const [password, setPassword] = useState('');
   const [perms, setPerms] = useState<Record<string, boolean>>({});
   const [msg, setMsg] = useState('');
+  const [resetUid, setResetUid] = useState<string | null>(null); // which admin's reset is in flight
+  const [resetSentUid, setResetSentUid] = useState<string | null>(null); // last one that succeeded
 
   const load = useCallback(() => {
     adminJson<{ ok: boolean; admins: AdminItem[] }>('/api/admin/admins').then((r) => setAdmins(r.admins ?? []));
@@ -64,6 +68,33 @@ export default function AdminsPage() {
     load();
   }
 
+  /**
+   * Send THAT admin a Firebase password-reset email (owner request,
+   * 2026-09-11) — this is the exact same public Firebase Auth operation
+   * the "Reset password" link on the login page already uses (just with
+   * a different target email), so it needs no backend endpoint: it
+   * doesn't touch or need to know the caller's own session at all. A
+   * continueUrl is set so Firebase's own reset-password page offers a
+   * link straight back to our login page once the admin sets a new
+   * password. (The wording/branding of the EMAIL ITSELF — subject, sender
+   * name, logo — is a Firebase Console setting under Authentication →
+   * Templates → Password reset, not something changeable from app code.)
+   */
+  async function sendReset(a: AdminItem) {
+    setResetUid(a.uid);
+    setResetSentUid(null);
+    setMsg('');
+    try {
+      await sendPasswordResetEmail(getFirebaseAuth(), a.email, { url: `${window.location.origin}/login` });
+      setResetSentUid(a.uid);
+      setMsg(`Password reset email sent to ${a.email}.`);
+    } catch {
+      setMsg(`Could not send a reset email to ${a.email}. Check the address and try again.`);
+    } finally {
+      setResetUid(null);
+    }
+  }
+
   const inputCls =
     'rounded-lg border border-brand-ice-200 bg-brand-ice-50 px-3 py-2 text-sm text-brand-navy-900 outline-none focus:border-brand-blue-500 focus:bg-white focus:ring-2 focus:ring-brand-blue-500/20';
 
@@ -94,10 +125,22 @@ export default function AdminsPage() {
   }
 
   function Actions({ a }: { a: AdminItem }) {
+    // Any admin who can manage admins can send a reset to anyone, including
+    // the Root Admin (it's just an email to an address the recipient
+    // controls — it can't be used to escalate or lock anyone out).
     return (
       <>
+        {can('canManageAdmins') && (
+          <button
+            onClick={() => sendReset(a)}
+            disabled={resetUid === a.uid}
+            className="rounded-md border border-brand-ice-200 px-2 py-1 text-xs text-brand-navy-700 hover:bg-brand-ice-50 disabled:opacity-50"
+          >
+            {resetUid === a.uid ? 'Sending…' : resetSentUid === a.uid ? 'Sent ✓' : 'Send reset'}
+          </button>
+        )}
         {a.accountType !== 'ROOT_ADMIN' && can('canManageAdmins') && (
-          <button onClick={() => patch(a.uid, { active: !a.active })} className="rounded-md border border-brand-ice-200 px-2 py-1 text-xs text-brand-navy-700 hover:bg-brand-ice-50">
+          <button onClick={() => patch(a.uid, { active: !a.active })} className="ml-2 rounded-md border border-brand-ice-200 px-2 py-1 text-xs text-brand-navy-700 hover:bg-brand-ice-50">
             {a.active ? 'Disable' : 'Enable'}
           </button>
         )}

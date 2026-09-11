@@ -3,15 +3,16 @@
 // 0.390654 / 0.663265 / 0.220561). The QR must be a true square and must
 // never be scaled non-uniformly.
 //
-// Owner nudge (2026-09-11): the whole block — QR (and therefore its gold
-// box), the "ACCESS CODE" label, and the serial — moved UP 15px together
-// at the reference canvas (975 -> 960 for the QR's y). Only QR_Y_RATIO
-// changes here; the label and serial are both computed as offsets from
-// the QR's own position (see accessLabelGeometryBelowQr /
-// serialGeometryBelowQr below), so shifting the QR up carries the whole
-// group with it, preserving the spacing between them exactly.
+// Owner nudges (2026-09-11): the whole block — QR (and therefore its gold
+// box), the "ACCESS CODE" label, and the serial — moved UP 15px, then a
+// further 20px, together, at the reference canvas (975 -> 960 -> 940 for
+// the QR's y; -35px total). Only QR_Y_RATIO changes here; the label and
+// serial are both computed as offsets from the QR's own position (see
+// accessLabelGeometryBelowQr / serialGeometryBelowQr below), so shifting
+// the QR up carries the whole group with it, preserving the spacing
+// between them exactly.
 export const QR_X_RATIO = 0.390654;
-export const QR_Y_RATIO = 0.653061; // was 0.663265 (975px); -15px at the 1470-tall reference -> 960px
+export const QR_Y_RATIO = 0.639456; // was 0.663265 (975px) -> 0.653061 (960px) -> now 940px, -35px total
 export const QR_W_RATIO = 0.220561;
 
 // Same gold already used for the printed serial (#C5A059) — reused here so
@@ -178,10 +179,10 @@ export function deriveTemplateGeometry(canvasWidth: number, canvasHeight: number
 }
 
 // Reference: on the exact 1070×1470 artwork these must round back to the
-// approved box, now (418, 960, 236) after the -15px owner nudge above
-// (was 418, 975, 236).
+// approved box, now (418, 940, 236) after the -15px then -20px owner
+// nudges above (was 418, 975, 236).
 export const REFERENCE_CANVAS = { width: 1070, height: 1470 } as const;
-export const REFERENCE_QR_BOX = { x: 418, y: 960, size: 236 } as const;
+export const REFERENCE_QR_BOX = { x: 418, y: 940, size: 236 } as const;
 
 /**
  * Access-label fallback. Same reasoning as resolveSerialGeometry below:

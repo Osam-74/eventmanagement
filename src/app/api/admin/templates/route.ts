@@ -4,7 +4,7 @@ import { badRequest, requirePermission } from '@/lib/api/helpers';
 import { writeAudit } from '@/lib/audit';
 import { FieldValue } from 'firebase-admin/firestore';
 import sharp from 'sharp';
-import { deriveTemplateGeometry } from '@/lib/invitation/geometry';
+import { deriveTemplateGeometry, type QrBoxGeometry } from '@/lib/invitation/geometry';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -33,6 +33,13 @@ export async function POST(req: NextRequest) {
   const file = form.get('file');
   if (!(file instanceof File)) return badRequest('Missing artwork file');
   const name = String(form.get('name') ?? 'Default template');
+  // Opt-in (owner request 2026-09-11): unless the uploader explicitly asks
+  // for the app-drawn gold box, every template keeps today's exact
+  // behaviour — its own hand-drawn frame in the artwork, nothing extra
+  // composited. Any value other than the literal string 'auto' resolves
+  // to 'template', so a missing/typo'd field can never accidentally
+  // switch a template's rendering.
+  const qrBoxStyle: QrBoxGeometry['style'] = form.get('qrBoxStyle') === 'auto' ? 'auto' : 'template';
 
   const buffer = Buffer.from(await file.arrayBuffer());
   if (buffer.length > MAX_TEMPLATE_BYTES) return badRequest('Artwork too large (15MB max).');
@@ -52,8 +59,8 @@ export async function POST(req: NextRequest) {
 
   // Derive the QR box from the approved normalized placement so the template
   // scales safely to other resolutions.
-  const geometry = deriveTemplateGeometry(meta.width, meta.height);
-  const { qr, serial } = geometry;
+  const geometry = deriveTemplateGeometry(meta.width, meta.height, { qrBoxStyle });
+  const { qr, serial, qrBox } = geometry;
 
   await ref.set({
     name,
@@ -62,6 +69,7 @@ export async function POST(req: NextRequest) {
     canvasHeight: meta.height,
     qr,
     serial,
+    qrBox,
     outputProfiles: { share: { longEdge: 3000 }, hq: { longEdge: 7680 } },
     version: 1,
     active: true,

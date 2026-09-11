@@ -6,12 +6,65 @@ export const QR_X_RATIO = 0.390654;
 export const QR_Y_RATIO = 0.663265;
 export const QR_W_RATIO = 0.220561;
 
+// Same gold already used for the printed serial (#C5A059) — reused here so
+// an auto-drawn QR box and the serial text always read as one consistent
+// brand treatment.
+export const QR_BOX_GOLD = '#C5A059';
+
+export type QrBoxGeometry = {
+  // 'template' (default, unchanged behaviour): the master artwork already
+  // has its own hand-drawn frame at the approved QR ratios — the renderer
+  // draws nothing extra, exactly like every template today.
+  // 'auto': the renderer itself draws a gold-stroked box around the QR, so
+  // the artwork no longer needs a hand-drawn frame at that exact spot —
+  // owner request 2026-09-11.
+  style: 'template' | 'auto';
+  color: string;
+  // All three ratios are relative to qr.size, so the box scales cleanly
+  // with the QR at every output resolution, just like the QR itself.
+  strokeWidthRatio: number;
+  paddingRatio: number;
+  cornerRadiusRatio: number;
+};
+
 export type TemplateGeometry = {
   canvasWidth: number;
   canvasHeight: number;
   qr: { x: number; y: number; size: number; xRatio: number; yRatio: number; widthRatio: number };
   serial: { enabled: boolean; x: number; y: number; fontSize: number; color: string; plate?: boolean };
+  qrBox: QrBoxGeometry;
 };
+
+/** The one place the auto-box's default look is defined. */
+export function defaultQrBox(style: QrBoxGeometry['style'] = 'template'): QrBoxGeometry {
+  return {
+    style,
+    color: QR_BOX_GOLD,
+    strokeWidthRatio: 0.022,
+    paddingRatio: 0.07,
+    cornerRadiusRatio: 0.03,
+  };
+}
+
+/**
+ * Fills in any missing pieces of a stored qrBox with the approved
+ * defaults, and — critically — treats a completely absent/invalid field as
+ * `{ style: 'template' }`. Every template document written before this
+ * feature existed has no `qrBox` field at all; this must resolve those to
+ * "draw nothing extra", identical to today's behaviour, not silently start
+ * drawing a new box on artwork nobody designed for one.
+ */
+export function resolveQrBoxGeometry(stored?: Partial<QrBoxGeometry> | null): QrBoxGeometry {
+  const style: QrBoxGeometry['style'] = stored?.style === 'auto' ? 'auto' : 'template';
+  const base = defaultQrBox(style);
+  return {
+    style,
+    color: stored?.color ?? base.color,
+    strokeWidthRatio: stored?.strokeWidthRatio ?? base.strokeWidthRatio,
+    paddingRatio: stored?.paddingRatio ?? base.paddingRatio,
+    cornerRadiusRatio: stored?.cornerRadiusRatio ?? base.cornerRadiusRatio,
+  };
+}
 
 /**
  * Serial placement, derived directly from the ACTUAL qr box being rendered
@@ -45,8 +98,17 @@ export function serialGeometryBelowQr(
   };
 }
 
-/** Scales the approved normalized placement to the actual master artwork dimensions. */
-export function deriveTemplateGeometry(canvasWidth: number, canvasHeight: number): TemplateGeometry {
+/**
+ * Scales the approved normalized placement to the actual master artwork
+ * dimensions. `qrBoxStyle` defaults to 'template' — passing nothing at all
+ * reproduces the exact QR/serial geometry this function always returned,
+ * for every existing call site.
+ */
+export function deriveTemplateGeometry(
+  canvasWidth: number,
+  canvasHeight: number,
+  opts?: { qrBoxStyle?: QrBoxGeometry['style'] }
+): TemplateGeometry {
   const qr = {
     x: Math.round(QR_X_RATIO * canvasWidth),
     y: Math.round(QR_Y_RATIO * canvasHeight),
@@ -60,6 +122,7 @@ export function deriveTemplateGeometry(canvasWidth: number, canvasHeight: number
     canvasHeight,
     qr,
     serial: serialGeometryBelowQr(qr, canvasWidth, canvasHeight),
+    qrBox: defaultQrBox(opts?.qrBoxStyle ?? 'template'),
   };
 }
 

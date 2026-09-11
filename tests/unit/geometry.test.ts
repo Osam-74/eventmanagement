@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   deriveTemplateGeometry,
   resolveSerialGeometry,
+  resolveQrBoxGeometry,
   serialGeometryBelowQr,
+  QR_BOX_GOLD,
   REFERENCE_CANVAS,
   REFERENCE_QR_BOX,
 } from '@/lib/invitation/geometry';
@@ -109,6 +111,42 @@ describe('resolveSerialGeometry', () => {
     // particular canvas — callers are responsible for choosing sane QR
     // placement; this function's contract is "always directly under qr".
     expect(s.y).toBeGreaterThan(qr.y + qr.size);
+  });
+});
+
+describe('qrBox (auto gold box, owner request 2026-09-11)', () => {
+  it('deriveTemplateGeometry defaults to style "template" — no behaviour change for any existing call site', () => {
+    const g = deriveTemplateGeometry(REFERENCE_CANVAS.width, REFERENCE_CANVAS.height);
+    expect(g.qrBox.style).toBe('template');
+  });
+
+  it('deriveTemplateGeometry can opt into "auto" without touching the QR/serial placement', () => {
+    const withAuto = deriveTemplateGeometry(REFERENCE_CANVAS.width, REFERENCE_CANVAS.height, { qrBoxStyle: 'auto' });
+    const withoutAuto = deriveTemplateGeometry(REFERENCE_CANVAS.width, REFERENCE_CANVAS.height);
+    expect(withAuto.qrBox.style).toBe('auto');
+    expect(withAuto.qrBox.color).toBe(QR_BOX_GOLD);
+    expect(withAuto.qr).toEqual(withoutAuto.qr);
+    expect(withAuto.serial).toEqual(withoutAuto.serial);
+  });
+
+  it('resolveQrBoxGeometry falls back to "template" for a stored template with no qrBox field at all', () => {
+    // Every template document written before this feature existed has no
+    // qrBox field — must resolve to "draw nothing extra", not crash and
+    // not silently start drawing a box nobody asked for.
+    expect(resolveQrBoxGeometry(undefined).style).toBe('template');
+    expect(resolveQrBoxGeometry(null).style).toBe('template');
+  });
+
+  it('resolveQrBoxGeometry honors a stored "auto" style and fills in any missing sub-fields with defaults', () => {
+    const r = resolveQrBoxGeometry({ style: 'auto' });
+    expect(r.style).toBe('auto');
+    expect(r.color).toBe(QR_BOX_GOLD);
+    expect(r.strokeWidthRatio).toBeGreaterThan(0);
+    expect(r.paddingRatio).toBeGreaterThan(0);
+  });
+
+  it('resolveQrBoxGeometry rejects any non-"auto" stored value, defaulting safely to "template"', () => {
+    expect(resolveQrBoxGeometry({ style: 'bogus' as never }).style).toBe('template');
   });
 });
 

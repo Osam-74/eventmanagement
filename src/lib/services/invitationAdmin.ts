@@ -3,7 +3,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import type { bucket as bucketFn } from '@/lib/firebase/admin';
 import { generateQrToken } from '@/lib/qr/token';
 import { digestToken } from '@/lib/qr/digest';
-import { resolveSerialGeometry } from '@/lib/invitation/geometry';
+import { resolveSerialGeometry, resolveQrBoxGeometry } from '@/lib/invitation/geometry';
 import { renderInvitationImage } from '@/lib/invitation/render';
 
 type Bucket = ReturnType<typeof bucketFn>;
@@ -227,6 +227,7 @@ export async function regenerateInvitationImage(
       canvasHeight: template.canvasHeight as number,
       qr: template.qr as { x: number; y: number; size: number },
       serial: serialGeometry,
+      qrBox: resolveQrBoxGeometry(template.qrBox as never),
     },
     qrToken: token,
     serial: cardText,

@@ -12,6 +12,7 @@ type Template = {
   canvasHeight: number;
   qr: { x: number; y: number; size: number };
   serial: { enabled: boolean; x: number; y: number; fontSize: number };
+  qrBox?: { style: 'template' | 'auto' };
   createdAt: string | null;
 };
 
@@ -20,6 +21,11 @@ export default function TemplatesPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [name, setName] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  // Opt-in (owner request 2026-09-11): OFF by default so every existing
+  // template — and every upload unless this is ticked — behaves exactly
+  // as before: the artwork's own hand-drawn frame is what shows around
+  // the QR, nothing extra composited.
+  const [autoQrBox, setAutoQrBox] = useState(false);
   const [msg, setMsg] = useState('');
 
   const load = () => adminJson<{ ok: boolean; templates: Template[] }>('/api/admin/templates').then((r) => setTemplates(r.templates ?? []));
@@ -32,9 +38,10 @@ export default function TemplatesPage() {
     const form = new FormData();
     form.append('name', name || 'Default template');
     form.append('file', file);
+    if (autoQrBox) form.append('qrBoxStyle', 'auto');
     const res = await adminFetch('/api/admin/templates', { method: 'POST', body: form });
     const body = await res.json().catch(() => ({}));
-    if (res.ok) { setMsg('Template saved.'); setName(''); setFile(null); load(); }
+    if (res.ok) { setMsg('Template saved.'); setName(''); setFile(null); setAutoQrBox(false); load(); }
     else setMsg(body.message ?? 'Upload failed.');
   }
 
@@ -60,6 +67,20 @@ export default function TemplatesPage() {
             <input type="file" accept="image/png,image/jpeg" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className={inputCls} />
             <button className="rounded-lg bg-brand-blue-500 px-4 py-2 font-medium text-white hover:bg-brand-blue-600">Upload template</button>
           </div>
+          <label className="mt-3 flex items-start gap-2 text-sm text-brand-navy-700">
+            <input
+              type="checkbox"
+              checked={autoQrBox}
+              onChange={(e) => setAutoQrBox(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-brand-ice-200 text-brand-blue-500 focus:ring-brand-blue-500/30"
+            />
+            <span>
+              Let the app draw the gold QR box automatically
+              <span className="block text-xs text-brand-navy-700/50">
+                Skip hand-drawing a frame in your artwork — leave that area blank at the same QR position/ratio and the app composites a matching gold box around the QR at render time.
+              </span>
+            </span>
+          </label>
           {msg && <p className="mt-2 text-sm text-brand-navy-700">{msg}</p>}
         </form>
       )}
@@ -75,6 +96,7 @@ export default function TemplatesPage() {
                 <td className="px-4 py-2.5 text-brand-navy-700/60">{t.canvasWidth}×{t.canvasHeight}px</td>
                 <td className="px-4 py-2.5 text-brand-navy-700/60">QR box {t.qr.x},{t.qr.y} size {t.qr.size}</td>
                 <td className="px-4 py-2.5 text-brand-navy-700/60">serial {t.serial.enabled ? 'on' : 'off'}</td>
+                <td className="px-4 py-2.5 text-brand-navy-700/60">{t.qrBox?.style === 'auto' ? 'auto gold box' : 'artwork frame'}</td>
                 <td className="px-4 py-2.5 text-right">
                   {can('canManageEvents') && (
                     <button onClick={() => remove(t)} className="rounded-md border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50">

@@ -14,6 +14,17 @@ export type TemplateGeometry = {
     color: string;
     plate?: boolean;
   };
+  // Optional — omitted (or style 'template') reproduces the exact output
+  // this function always produced: no extra overlay, the master artwork's
+  // own hand-drawn frame is what the viewer sees around the QR. Only
+  // style 'auto' draws anything here. See src/lib/invitation/geometry.ts.
+  qrBox?: {
+    style: 'template' | 'auto';
+    color: string;
+    strokeWidthRatio: number;
+    paddingRatio: number;
+    cornerRadiusRatio: number;
+  };
 };
 
 export const SHARE_LONG_EDGE = 3000;
@@ -80,8 +91,35 @@ export async function renderInvitationImage(opts: {
     color: { dark: '#000000ff', light: '#ffffffff' },
   });
 
-  const overlays: sharp.OverlayOptions[] = [
-    // clean white backing so QR modules always sit on white inside the frame
+  const overlays: sharp.OverlayOptions[] = [];
+
+  // Auto-drawn QR box (owner request 2026-09-11): a gold-stroked frame
+  // rendered ENTIRELY OUTSIDE the qrX/qrY/qrSize footprint — padding always
+  // pushes it outward, never inward — so it can never touch, let alone
+  // cover, a single QR module. Only style 'auto' draws this; every
+  // template without it (i.e. all of them until an admin opts in) gets
+  // this array empty, identical to before this feature existed.
+  if (geometry.qrBox?.style === 'auto') {
+    const pad = Math.round(qrSize * geometry.qrBox.paddingRatio);
+    const stroke = Math.max(1, Math.round(qrSize * geometry.qrBox.strokeWidthRatio));
+    const radius = Math.round(qrSize * geometry.qrBox.cornerRadiusRatio);
+    const boxSize = qrSize + pad * 2;
+    const half = stroke / 2;
+    const color = escapeXml(geometry.qrBox.color);
+    overlays.push({
+      input: Buffer.from(
+        `<svg width="${boxSize}" height="${boxSize}">` +
+          `<rect x="${half}" y="${half}" width="${boxSize - stroke}" height="${boxSize - stroke}" ` +
+          `rx="${radius}" fill="none" stroke="${color}" stroke-width="${stroke}"/>` +
+          `</svg>`
+      ),
+      left: qrX - pad,
+      top: qrY - pad,
+    });
+  }
+
+  // clean white backing so QR modules always sit on white inside the frame
+  overlays.push(
     {
       input: Buffer.from(
         `<svg width="${qrSize}" height="${qrSize}"><rect width="${qrSize}" height="${qrSize}" fill="#ffffff"/></svg>`
@@ -89,8 +127,8 @@ export async function renderInvitationImage(opts: {
       left: qrX,
       top: qrY,
     },
-    { input: qrBuffer, left: qrX, top: qrY },
-  ];
+    { input: qrBuffer, left: qrX, top: qrY }
+  );
 
   if (geometry.serial?.enabled) {
     // The serial is drawn as VECTOR PATHS, not SVG <text>: sharp renders

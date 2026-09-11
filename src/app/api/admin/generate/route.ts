@@ -6,7 +6,7 @@ import { writeAudit } from '@/lib/audit';
 import { generateQrToken } from '@/lib/qr/token';
 import { digestToken } from '@/lib/qr/digest';
 import { formatSerial } from '@/lib/invitation/serial';
-import { resolveSerialGeometry } from '@/lib/invitation/geometry';
+import { resolveSerialGeometry, resolveQrBoxGeometry } from '@/lib/invitation/geometry';
 import { renderInvitationImage } from '@/lib/invitation/render';
 import { FieldValue } from 'firebase-admin/firestore';
 
@@ -101,6 +101,7 @@ export async function POST(req: NextRequest) {
           canvasHeight: template.canvasHeight as number,
           qr: template.qr as { x: number; y: number; size: number },
           serial: serialGeometry,
+          qrBox: resolveQrBoxGeometry(template.qrBox as never),
         },
         qrToken: token,
         serial: cardText,

@@ -7,8 +7,8 @@ export const QR_Y_RATIO = 0.663265;
 export const QR_W_RATIO = 0.220561;
 
 // Same gold already used for the printed serial (#C5A059) — reused here so
-// the QR box and the serial text always read as one consistent brand
-// treatment.
+// the QR box, the "ACCESS CODE" label, and the serial all read as one
+// consistent brand treatment.
 export const QR_BOX_GOLD = '#C5A059';
 
 export type QrBoxGeometry = {
@@ -20,10 +20,23 @@ export type QrBoxGeometry = {
   cornerRadiusRatio: number;
 };
 
+export type AccessLabelGeometry = {
+  enabled: boolean;
+  text: string;
+  x: number;
+  y: number;
+  fontSize: number;
+  letterSpacing: number;
+  color: string;
+};
+
 export type TemplateGeometry = {
   canvasWidth: number;
   canvasHeight: number;
   qr: { x: number; y: number; size: number; xRatio: number; yRatio: number; widthRatio: number };
+  // Caption drawn directly under the QR, above the serial — see
+  // accessLabelGeometryBelowQr() below.
+  accessLabel: AccessLabelGeometry;
   serial: { enabled: boolean; x: number; y: number; fontSize: number; color: string; plate?: boolean };
   qrBox: QrBoxGeometry;
 };
@@ -62,6 +75,37 @@ export function resolveQrBoxGeometry(stored?: Partial<QrBoxGeometry> | null): Qr
 }
 
 /**
+ * "ACCESS CODE" caption, drawn directly under the QR, above the serial.
+ *
+ * Owner report (2026-09-11): the master artwork was assumed to already
+ * carry this label baked into its pixels — it does not, so generated
+ * cards came out with no label at all. Fixed the same way the serial
+ * already is: drawn by the renderer itself as vector paths (see
+ * serialGlyphs.ts — sharp's SVG <text> renders through fontconfig, which
+ * has no usable fonts on Vercel's serverless image, so it must never be
+ * plain <text>), so it is guaranteed present on every card regardless of
+ * what the artwork does or doesn't contain.
+ */
+export function accessLabelGeometryBelowQr(
+  qr: { x: number; y: number; size: number },
+  canvasWidth: number,
+  canvasHeight: number
+): AccessLabelGeometry {
+  return {
+    enabled: true,
+    text: 'ACCESS CODE',
+    x: Math.round(qr.x + qr.size / 2),
+    // Sits in the gap between the QR and the serial, closer to the QR —
+    // the serial's own offset (below) was pushed down to keep both clear
+    // of one another.
+    y: Math.round(qr.y + qr.size + 0.0231 * canvasHeight),
+    fontSize: Math.round(0.0131 * canvasWidth),
+    letterSpacing: Math.round(0.0131 * canvasWidth * 0.22),
+    color: QR_BOX_GOLD,
+  };
+}
+
+/**
  * Serial placement, derived directly from the ACTUAL qr box being rendered
  * — never recomputed independently from fixed reference ratios. Before this
  * fix, `resolveSerialGeometry` recalculated the serial's position from the
@@ -80,14 +124,16 @@ export function serialGeometryBelowQr(
 ): TemplateGeometry['serial'] {
   return {
     enabled: true,
-    // Directly UNDER the QR, centered on it. Owner decision (2026-09-10):
-    // half the previous size, gold text, no background plate — the
-    // approved artwork already carries a "— Access code —" label in gold,
-    // so the serial now matches that same gold treatment instead of a
-    // separate white tag.
+    // Directly UNDER the QR, centered on it. Owner decisions (2026-09-10 /
+    // 2026-09-11): half the previous size, gold text, no background
+    // plate; font size then increased another 4px (2026-09-11) — was
+    // 17px at the 1070-wide reference, now 21px (ratio 0.0196262 ≈
+    // 21/1070). Vertical offset pushed down from the original tuned
+    // value (0.0505) to 0.0645 of canvasHeight to leave clearance under
+    // the new "ACCESS CODE" label directly above it.
     x: Math.round(qr.x + qr.size / 2),
-    y: Math.round(qr.y + qr.size + 0.0505 * canvasHeight), // nudged up ~6px, then +10px, then a further +20px (owner requests 2026-09-10, at the 1470-tall reference) — 36px total
-    fontSize: Math.round(0.016 * canvasWidth),
+    y: Math.round(qr.y + qr.size + 0.0645 * canvasHeight),
+    fontSize: Math.round(0.0196262 * canvasWidth),
     color: '#C5A059',
     plate: false,
   };
@@ -95,8 +141,8 @@ export function serialGeometryBelowQr(
 
 /**
  * Scales the approved normalized placement to the actual master artwork
- * dimensions. Every template gets the gold QR box automatically — there is
- * no opt-out and nothing to pass in.
+ * dimensions. Every template gets the gold QR box and "ACCESS CODE" label
+ * automatically — there is no opt-out and nothing to pass in.
  */
 export function deriveTemplateGeometry(canvasWidth: number, canvasHeight: number): TemplateGeometry {
   const qr = {
@@ -111,6 +157,7 @@ export function deriveTemplateGeometry(canvasWidth: number, canvasHeight: number
     canvasWidth,
     canvasHeight,
     qr,
+    accessLabel: accessLabelGeometryBelowQr(qr, canvasWidth, canvasHeight),
     serial: serialGeometryBelowQr(qr, canvasWidth, canvasHeight),
     qrBox: defaultQrBox(),
   };
@@ -120,6 +167,22 @@ export function deriveTemplateGeometry(canvasWidth: number, canvasHeight: number
 // approved box (418, 975, 236).
 export const REFERENCE_CANVAS = { width: 1070, height: 1470 } as const;
 export const REFERENCE_QR_BOX = { x: 418, y: 975, size: 236 } as const;
+
+/**
+ * Access-label fallback. Same reasoning as resolveSerialGeometry below:
+ * ALWAYS resolve to the approved near-QR placement, anchored to THIS
+ * template's real qr box, so every template — including the one active
+ * right now, which predates this feature and has no accessLabel stored at
+ * all — gets the label on its very next generated or regenerated card,
+ * with no database migration required.
+ */
+export function resolveAccessLabelGeometry(template: {
+  canvasWidth: number;
+  canvasHeight: number;
+  qr: { x: number; y: number; size: number };
+}): AccessLabelGeometry {
+  return accessLabelGeometryBelowQr(template.qr, template.canvasWidth, template.canvasHeight);
+}
 
 /**
  * Serial-print fallback. Templates uploaded before serial support shipped

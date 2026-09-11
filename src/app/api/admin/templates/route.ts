@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
   // Every template gets the gold QR box automatically (owner decision
   // 2026-09-11) — nothing to configure at upload time.
   const geometry = deriveTemplateGeometry(meta.width, meta.height);
-  const { qr, serial, qrBox } = geometry;
+  const { qr, accessLabel, serial, qrBox } = geometry;
 
   await ref.set({
     name,
@@ -63,6 +63,7 @@ export async function POST(req: NextRequest) {
     canvasWidth: meta.width,
     canvasHeight: meta.height,
     qr,
+    accessLabel,
     serial,
     qrBox,
     outputProfiles: { share: { longEdge: 3000 }, hq: { longEdge: 7680 } },

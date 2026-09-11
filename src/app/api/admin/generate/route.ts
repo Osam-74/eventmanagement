@@ -6,7 +6,7 @@ import { writeAudit } from '@/lib/audit';
 import { generateQrToken } from '@/lib/qr/token';
 import { digestToken } from '@/lib/qr/digest';
 import { formatSerial } from '@/lib/invitation/serial';
-import { resolveSerialGeometry, resolveQrBoxGeometry } from '@/lib/invitation/geometry';
+import { resolveSerialGeometry, resolveQrBoxGeometry, resolveAccessLabelGeometry } from '@/lib/invitation/geometry';
 import { renderInvitationImage } from '@/lib/invitation/render';
 import { FieldValue } from 'firebase-admin/firestore';
 
@@ -55,6 +55,15 @@ export async function POST(req: NextRequest) {
     serial: template.serial as never,
   });
 
+  // "ACCESS CODE" caption — same always-on, anchored-to-the-real-qr-box
+  // resolution as the serial and the gold box above; no per-template
+  // opt-out.
+  const accessLabelGeometry = resolveAccessLabelGeometry({
+    canvasWidth: template.canvasWidth as number,
+    canvasHeight: template.canvasHeight as number,
+    qr: template.qr as { x: number; y: number; size: number },
+  });
+
   // create batch record
   const batchRef = db().collection('batches').doc();
   await batchRef.set({
@@ -100,6 +109,7 @@ export async function POST(req: NextRequest) {
           canvasWidth: template.canvasWidth as number,
           canvasHeight: template.canvasHeight as number,
           qr: template.qr as { x: number; y: number; size: number },
+          accessLabel: accessLabelGeometry,
           serial: serialGeometry,
           qrBox: resolveQrBoxGeometry(template.qrBox as never),
         },

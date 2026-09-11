@@ -6,6 +6,19 @@ export type TemplateGeometry = {
   canvasWidth: number;
   canvasHeight: number;
   qr: { x: number; y: number; size: number };
+  // Every template gets this drawn automatically (owner decision
+  // 2026-09-11) — kept optional here only so a caller that genuinely omits
+  // it entirely (e.g. an old test fixture) just skips the extra caption
+  // instead of crashing. See src/lib/invitation/geometry.ts.
+  accessLabel?: {
+    enabled: boolean;
+    text: string;
+    x: number;
+    y: number;
+    fontSize: number;
+    letterSpacing: number;
+    color: string;
+  };
   serial?: {
     enabled: boolean;
     x: number;
@@ -126,6 +139,32 @@ export async function renderInvitationImage(opts: {
     },
     { input: qrBuffer, left: qrX, top: qrY }
   );
+
+  if (geometry.accessLabel?.enabled) {
+    // Same font-safe vector-path renderer as the serial (see serialGlyphs.ts)
+    // — sharp's SVG <text> renders through fontconfig, which has no usable
+    // fonts on Vercel's serverless image, so a plain <text> caption would
+    // silently render as nothing there, same failure mode the serial itself
+    // already hit in production once.
+    const labelFontSize = Math.round(geometry.accessLabel.fontSize * scale);
+    const labelLetterSpacing = Math.round(geometry.accessLabel.letterSpacing * scale);
+    const lx = Math.round(geometry.accessLabel.x * scale);
+    const ly = Math.round(geometry.accessLabel.y * scale);
+    const labelColor = escapeXml(geometry.accessLabel.color);
+    const labelContent = serialToSvgPaths(
+      geometry.accessLabel.text,
+      lx,
+      ly,
+      labelFontSize,
+      labelLetterSpacing,
+      labelColor
+    );
+    overlays.push({
+      input: Buffer.from(`<svg width="${width}" height="${height}">${labelContent}</svg>`),
+      left: 0,
+      top: 0,
+    });
+  }
 
   if (geometry.serial?.enabled) {
     // The serial is drawn as VECTOR PATHS, not SVG <text>: sharp renders

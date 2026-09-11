@@ -3,6 +3,8 @@ import {
   deriveTemplateGeometry,
   resolveSerialGeometry,
   resolveQrBoxGeometry,
+  resolveAccessLabelGeometry,
+  accessLabelGeometryBelowQr,
   serialGeometryBelowQr,
   QR_BOX_GOLD,
   REFERENCE_CANVAS,
@@ -111,6 +113,57 @@ describe('resolveSerialGeometry', () => {
     // particular canvas — callers are responsible for choosing sane QR
     // placement; this function's contract is "always directly under qr".
     expect(s.y).toBeGreaterThan(qr.y + qr.size);
+  });
+});
+
+describe('accessLabel ("ACCESS CODE" caption, drawn by the renderer, owner report 2026-09-11)', () => {
+  it('deriveTemplateGeometry always includes an enabled "ACCESS CODE" label', () => {
+    const g = deriveTemplateGeometry(REFERENCE_CANVAS.width, REFERENCE_CANVAS.height);
+    expect(g.accessLabel.enabled).toBe(true);
+    expect(g.accessLabel.text).toBe('ACCESS CODE');
+    expect(g.accessLabel.color).toBe(QR_BOX_GOLD);
+  });
+
+  it('sits directly under the QR, centered on it, and strictly above the serial (no overlap)', () => {
+    const g = deriveTemplateGeometry(REFERENCE_CANVAS.width, REFERENCE_CANVAS.height);
+    expect(g.accessLabel.x).toBe(Math.round(g.qr.x + g.qr.size / 2));
+    expect(g.accessLabel.y).toBeGreaterThan(g.qr.y + g.qr.size);
+    expect(g.accessLabel.y).toBeLessThan(g.serial.y);
+    // A real vertical gap between the two baselines, not just "less than" —
+    // guards against the label and serial glyphs visually overlapping.
+    expect(g.serial.y - g.accessLabel.y).toBeGreaterThanOrEqual(g.accessLabel.fontSize);
+  });
+
+  it('resolveAccessLabelGeometry ALWAYS resolves the label — including for a template stored before this feature existed', () => {
+    // The template active in production right now has no accessLabel
+    // field at all. It must still get the label on its next generated or
+    // regenerated card, with no database migration.
+    const r = resolveAccessLabelGeometry({
+      canvasWidth: REFERENCE_CANVAS.width,
+      canvasHeight: REFERENCE_CANVAS.height,
+      qr: REFERENCE_QR_BOX,
+    });
+    expect(r).toEqual(accessLabelGeometryBelowQr(REFERENCE_QR_BOX, REFERENCE_CANVAS.width, REFERENCE_CANVAS.height));
+    expect(r.enabled).toBe(true);
+  });
+
+  it('REGRESSION: follows the QR wherever it actually is on THIS template, same as the serial', () => {
+    const customQr = { x: 50, y: 1000, size: 300 };
+    const r = accessLabelGeometryBelowQr(customQr, REFERENCE_CANVAS.width, REFERENCE_CANVAS.height);
+    expect(r.x).toBe(Math.round(customQr.x + customQr.size / 2));
+    expect(r.y).toBeGreaterThan(customQr.y + customQr.size);
+  });
+});
+
+describe('serial font size (+4px, owner decision 2026-09-11)', () => {
+  it('the reference-canvas serial font size is now 21px (was 17px before this request)', () => {
+    const g = deriveTemplateGeometry(REFERENCE_CANVAS.width, REFERENCE_CANVAS.height);
+    expect(g.serial.fontSize).toBe(21);
+  });
+
+  it('scales proportionally on a non-reference canvas width, same as before', () => {
+    const g = deriveTemplateGeometry(2140, 2940); // 2x the reference
+    expect(g.serial.fontSize).toBe(42);
   });
 });
 

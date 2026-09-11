@@ -130,8 +130,7 @@ export default function InvitationsPage() {
         <h2 className="mb-1 font-semibold text-brand-navy-900">Invitations — trace &amp; manage</h2>
         <p className="mb-3 text-sm text-brand-navy-700/60">
           Search by the serial number printed on the card (e.g. <code>ISWED-00042</code>) or paste a scanned QR
-          credential. You&apos;ll see its status, who scanned it and when — and you can release it for a rescan
-          (e.g. after a network failure at the gate).
+          credential.
         </p>
         <div className="flex flex-wrap gap-2">
           <input

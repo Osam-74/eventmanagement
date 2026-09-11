@@ -76,11 +76,6 @@ export default function UshersPage() {
       {can('canManageUshers') && (
         <form onSubmit={create} className="rounded-xl border border-brand-ice-200 bg-white p-4 shadow-sm">
           <h2 className="mb-1 font-semibold text-brand-navy-900">Create usher (gate official)</h2>
-          <p className="mb-3 text-sm text-brand-navy-700/60">
-            The PIN alone identifies the usher at the gate — no name or event selection there.
-            Leave PIN empty for a secure auto-generated unique 6-digit PIN.
-            The PIN is shown to you exactly once; hand it over privately.
-          </p>
           <div className="grid gap-3 sm:grid-cols-4">
             <input placeholder="Usher name" value={name} onChange={(e) => setName(e.target.value)} className={inputCls} required />
             <input placeholder="PIN (optional, 6 digits)" value={pin} onChange={(e) => setPin(e.target.value)} className={inputCls} />

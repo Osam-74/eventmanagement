@@ -110,10 +110,6 @@ export default function GeneratePage() {
     <div className="max-w-3xl space-y-6">
       <form onSubmit={generate} className="rounded-xl border border-brand-ice-200 bg-white p-4 shadow-sm">
         <h2 className="mb-3 font-semibold text-brand-navy-900">Generate invitation cards</h2>
-        <p className="mb-3 text-sm text-brand-navy-700/60">
-          Each card receives a unique cryptographically random QR credential and a traceable serial number
-          printed on the card (or a custom tag instead, if you set one below). Generated on demand — never pre-generated.
-        </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-sm text-brand-navy-800">
             Quantity (1–50)

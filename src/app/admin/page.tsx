@@ -300,7 +300,7 @@ export default function DashboardPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Usher roster — independent widget */}
-        <div className={card}>
+        <div className={`${card} min-w-0`}>
           <h2 className="mb-3 font-semibold">Ushers</h2>
           {ushersWidget.loading ? (
             <Skeleton rows={5} />
@@ -337,7 +337,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Recent scan activity — independent widget, proper data table */}
-        <div className={card}>
+        <div className={`${card} min-w-0`}>
           <h2 className="mb-3 font-semibold">Recent scans</h2>
           {activityWidget.loading ? (
             <Skeleton rows={5} />

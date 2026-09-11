@@ -55,10 +55,6 @@ export default function TemplatesPage() {
       {can('canManageEvents') && (
         <form onSubmit={upload} className="rounded-xl border border-brand-ice-200 bg-white p-4 shadow-sm">
           <h2 className="mb-1 font-semibold text-brand-navy-900">Upload QR-ready master artwork</h2>
-          <p className="mb-3 text-sm text-brand-navy-700/60">
-            The master must contain the approved design and the gold “Access code” frame, but <strong>no QR</strong> —
-            the system overlays the real QR at the approved coordinates (normalized 0.3907 / 0.6633 / 0.2206).
-          </p>
           <div className="grid gap-3 sm:grid-cols-3">
             <input placeholder="Template name" value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
             <input type="file" accept="image/png,image/jpeg" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className={inputCls} />
@@ -92,9 +88,6 @@ export default function TemplatesPage() {
           </tbody>
         </table>
         </div>
-        <p className="border-t border-brand-ice-100 px-4 py-3 text-xs text-brand-navy-700/40">
-          To assign a template to an event, use the API <code>PATCH /api/admin/events/&#123;id&#125;</code> with templateId, or contact the developer console. (Assignment UI coming with template preview.)
-        </p>
       </div>
     </div>
   );

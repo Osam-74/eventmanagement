@@ -95,10 +95,11 @@ export function accessLabelGeometryBelowQr(
     enabled: true,
     text: 'ACCESS CODE',
     x: Math.round(qr.x + qr.size / 2),
-    // Sits in the gap between the QR and the serial, closer to the QR —
-    // the serial's own offset (below) was pushed down to keep both clear
-    // of one another.
-    y: Math.round(qr.y + qr.size + 0.0231 * canvasHeight),
+    // Sits in the gap between the QR and the serial, closer to the QR.
+    // Owner nudge (2026-09-11): +15px at the reference canvas (was 34px
+    // below the QR, now 49px — ratio 49/1470) to open a touch more
+    // breathing room right under the QR.
+    y: Math.round(qr.y + qr.size + 0.0333333 * canvasHeight),
     fontSize: Math.round(0.0131 * canvasWidth),
     letterSpacing: Math.round(0.0131 * canvasWidth * 0.22),
     color: QR_BOX_GOLD,
@@ -131,8 +132,13 @@ export function serialGeometryBelowQr(
     // 21/1070). Vertical offset pushed down from the original tuned
     // value (0.0505) to 0.0645 of canvasHeight to leave clearance under
     // the new "ACCESS CODE" label directly above it.
+    // Owner nudge (2026-09-11): moved UP from the previous offset (95px at
+    // the reference canvas) to 81px, so the gap to the "ACCESS CODE" label
+    // right above it is a moderate ~32px, not the ~61px gap before —
+    // still comfortably clear of the label's glyphs (which sit entirely
+    // above their own baseline, ~16px tall at this font size).
     x: Math.round(qr.x + qr.size / 2),
-    y: Math.round(qr.y + qr.size + 0.0645 * canvasHeight),
+    y: Math.round(qr.y + qr.size + 0.0551020 * canvasHeight),
     fontSize: Math.round(0.0196262 * canvasWidth),
     color: '#C5A059',
     plate: false,

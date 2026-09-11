@@ -16,3 +16,4 @@ firestore-debug.log
 firebase-debug.log
 tsconfig.tsbuildinfo
 /assets/
+.git-commit-msg.txt

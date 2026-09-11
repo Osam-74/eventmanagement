@@ -394,7 +394,7 @@ export default function DashboardPage() {
 
       {/* Scan analytics — independent widget, same ushers data already polled above */}
       <div className={card}>
-        <h2 className="mb-3 font-semibold">Scan analytics — accepted scans per usher</h2>
+        <h2 className="mb-3 font-semibold">Scan analytics</h2>
         {ushersWidget.loading ? (
           <Skeleton rows={4} />
         ) : ushersWidget.error ? (

@@ -219,14 +219,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   </button>
                   <h2 className="text-sm font-semibold text-brand-navy-900 md:hidden">{currentLabel}</h2>
 
-                  {/* Breadcrumb + event switcher, merged: the event name IS the
-                      context anchor now — no separate dark banner repeats it
-                      lower on the page (owner revamp, 2026-09-10). */}
+                  {/* Event switcher — the redundant "Events" breadcrumb link
+                      that used to sit before it was removed (owner request,
+                      2026-09-11); it's already the first item in the sidebar
+                      nav, so it wasn't adding anything here. */}
                   <div className="flex min-w-0 items-center gap-2 text-sm">
-                    <Link href="/admin/events" className="shrink-0 text-brand-navy-700/40 transition hover:text-brand-navy-700">
-                      Events
-                    </Link>
-                    <span className="shrink-0 text-brand-navy-700/25">/</span>
                     <select
                       value={selected}
                       onChange={(e) => selectEvent(e.target.value)}

@@ -78,7 +78,7 @@ describe('QR placement geometry', () => {
     for (const [w, h] of [[2140, 2940], [3000, 4121], [1000, 1500]] as [number, number][]) {
       const g = deriveTemplateGeometry(w, h);
       expect(g.qr.x).toBeCloseTo(0.390654 * w, -2);
-      expect(g.qr.y).toBeCloseTo(0.663265 * h, -2);
+      expect(g.qr.y).toBeCloseTo(0.653061 * h, -2); // -15px owner nudge (2026-09-11), was 0.663265
       expect(Math.abs(g.qr.size - Math.round(0.220561 * w))).toBeLessThanOrEqual(1);
     }
   });

@@ -484,9 +484,6 @@ export default function ScannerPage() {
             <div className="min-w-0">
               <p className="truncate text-xs font-medium text-brand-navy-700/55">{getGreeting()}</p>
               <p className="truncate text-base font-semibold leading-tight text-brand-navy-900">{session.usherName}</p>
-              <p className="truncate text-xs text-brand-navy-700/50">
-                {session.eventName} {session.gateId ? `· Gate: ${session.gateId}` : ''}
-              </p>
             </div>
           </div>
           <button
@@ -496,6 +493,13 @@ export default function ScannerPage() {
           >
             <SignOutIcon className="h-5 w-5" />
           </button>
+        </div>
+
+        {/* ---------------- event details (own section, owner request 2026-09-11:
+             pulled out of the usher-identity header into its own container) ---------------- */}
+        <div className="mt-3.5 rounded-xl bg-blue-50 px-4 py-2.5">
+          <p className="truncate text-sm font-semibold text-brand-navy-900">{session.eventName}</p>
+          {session.gateId && <p className="truncate text-xs text-brand-navy-700/50">Gate: {session.gateId}</p>}
         </div>
 
         {/* ---------------- status pills ---------------- */}
@@ -520,7 +524,7 @@ export default function ScannerPage() {
         )}
 
         {cameraError && (
-          <div className="mt-4 rounded-xl bg-amber-50 p-4 text-sm font-medium text-amber-800 ring-1 ring-amber-200">{cameraError}</div>
+          <p className="mt-4 text-center text-sm font-medium text-red-600">{cameraError}</p>
         )}
 
         {/* ---------------- camera card: idle / active ---------------- */}
@@ -591,7 +595,7 @@ export default function ScannerPage() {
 
         {scanning && (
           <p role="status" data-decoder-ready={decoderReady} className="mt-2 text-center text-sm text-brand-navy-700/55">
-            {processing ? 'Processing invitation…' : decoderReady ? 'Scanner ready — point the camera at the invitation QR.' : 'Camera live — waiting for the QR decoder…'}
+            {processing ? 'Processing invitation…' : decoderReady ? '' : 'Camera live — waiting for the QR decoder…'}
           </p>
         )}
 

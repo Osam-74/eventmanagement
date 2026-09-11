@@ -540,7 +540,10 @@ describe('QR decode — the camera actually READS a code and checks it in', () =
       expect(calls).toBe(1);
       await expectVisible(p.getByText('Invalid invitation'), 15000);
       expect(calls).toBe(2);
-      await expectVisible(p.getByText('Scanner ready — point the camera at the invitation QR.'), 10000);
+      // The visible "Scanner ready" copy was intentionally removed
+      // (owner request, 2026-09-11) — the real signal that the scanner
+      // resumed and became ready again after the denial is this attribute.
+      await p.locator('[data-decoder-ready="true"]').waitFor({ state: 'attached', timeout: 10000 });
       await p.goto(`${BASE}/`);
       const callsAfterCleanup = calls;
       await p.waitForTimeout(6000);

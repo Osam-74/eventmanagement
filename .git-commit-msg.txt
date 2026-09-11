@@ -1,0 +1,30 @@
+refine(scan): event details as own section, drop decoder-ready copy, plain-white camera error text
+
+Owner feedback (2026-09-11) on the redesign, three changes:
+
+- Event name/gate moved out of the usher-identity header into its own
+  section directly beneath it (subtle light-blue bg-blue-50 card),
+  positioned after the header and before the status pills/camera —
+  header now shows only greeting + usher name.
+
+- Removed the visible "Scanner ready — point the camera at the
+  invitation QR." copy entirely. The data-decoder-ready-bearing <p>
+  stays mounted (still flips to "Processing invitation…" / "Camera
+  live — waiting for the QR decoder…" for the other two states) since
+  existing e2e coverage asserts on that attribute directly — only the
+  text for the decoderReady case is now empty.
+
+- cameraError banner: dropped the amber card entirely (no background,
+  no ring) — plain red text on the page background, per instruction
+  ("no bg, red text is enough").
+
+Updated the one e2e assertion that depended on the now-removed "Scanner
+ready" text — it was checking that the scanner resumes and becomes
+ready again after a denial, so it now waits on the data-decoder-ready
+attribute directly instead, which is the actual signal and still
+mounted.
+
+Verified: tsc clean, 80/80 unit tests, production build clean. Purely
+presentational — no scanner/auth/API logic touched, so no full E2E rerun
+for this batch per standing policy; will run before next production
+deploy.

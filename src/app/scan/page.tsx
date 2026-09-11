@@ -87,6 +87,13 @@ export default function ScannerPage() {
   const [scanning, setScanning] = useState(false);
   const [starting, setStarting] = useState(false);
   const [result, setResult] = useState<ScanResult | null>(null);
+  // Bumped every time a NEW result is shown — used as the toast's React
+  // `key` so its entrance animation + 3s countdown bar restart cleanly
+  // even when two scans in a row land the exact same kind/message
+  // (owner request, 2026-09-11: floating popup above the scanner,
+  // auto-closes in 3s via a shrinking line, never a numeric countdown).
+  const [resultSeq, setResultSeq] = useState(0);
+  const resultTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [online, setOnline] = useState(true);
   const [cameraError, setCameraError] = useState('');
   const [decoderReady, setDecoderReady] = useState(false);
@@ -175,6 +182,7 @@ export default function ScannerPage() {
       mountedRef.current = false;
       generationRef.current++;
       if (cooldownRef.current) clearTimeout(cooldownRef.current);
+      if (resultTimerRef.current) clearTimeout(resultTimerRef.current);
       requestRef.current?.abort();
       stopWatchdog();
       if (inactivityTimerRef.current) clearInterval(inactivityTimerRef.current);
@@ -222,6 +230,17 @@ export default function ScannerPage() {
     }
   }
 
+  const RESULT_DISPLAY_MS = 3000;
+
+  function showResult(r: ScanResult) {
+    if (resultTimerRef.current) clearTimeout(resultTimerRef.current);
+    setResult(r);
+    setResultSeq((n) => n + 1);
+    resultTimerRef.current = setTimeout(() => {
+      if (mountedRef.current) setResult(null);
+    }, RESULT_DISPLAY_MS);
+  }
+
   async function submitToken(token: string, gateId?: string | null) {
     const now = Date.now();
     if (!shouldSubmitToken({ busy: busyRef.current, lastToken: lastTokenRef.current.token, lastAt: lastTokenRef.current.at }, token, now)) {
@@ -230,7 +249,7 @@ export default function ScannerPage() {
     // Connectivity pre-check (UX only — the server transaction remains the
     // sole authority; offline requests are never fabricated as granted).
     if (!navigator.onLine) {
-      setResult({ kind: 'error', message: 'No Internet — invitation NOT validated. Do not admit. Reconnect and scan again.' });
+      showResult({ kind: 'error', message: 'No Internet — invitation NOT validated. Do not admit. Reconnect and scan again.' });
       return;
     }
     busyRef.current = true;
@@ -266,7 +285,7 @@ export default function ScannerPage() {
       const body = await res.json();
       if (!mountedRef.current) return;
       if (body.code === 'ACCEPTED') {
-        setResult({
+        showResult({
           kind: 'granted',
           serial: body.serialNumber ?? null,
           tag: body.tag ?? null,
@@ -277,7 +296,7 @@ export default function ScannerPage() {
         setSession((s) => (s ? { ...s, acceptedCount: s.acceptedCount + 1 } : s));
         beep(true);
       } else {
-        setResult({
+        showResult({
           kind: 'denied',
           code: body.code,
           message: body.message,
@@ -289,7 +308,7 @@ export default function ScannerPage() {
       }
     } catch {
       if (!mountedRef.current) return;
-      setResult({ kind: 'error', message: 'Network error — invitation NOT validated. Do not admit. Check connection and scan again.' });
+      showResult({ kind: 'error', message: 'Network error — invitation NOT validated. Do not admit. Check connection and scan again.' });
     } finally {
       clearTimeout(timeout);
       requestRef.current = null;
@@ -393,6 +412,7 @@ export default function ScannerPage() {
         }
       );
       scannerRef.current = scanner;
+      if (resultTimerRef.current) { clearTimeout(resultTimerRef.current); resultTimerRef.current = null; }
       setResult(null);
       await scanner.start();
       if (!current()) { scanner.destroy(); return; }
@@ -528,7 +548,61 @@ export default function ScannerPage() {
         )}
 
         {/* ---------------- camera card: idle / active ---------------- */}
-        <div className="mt-4">
+        <div className="relative mt-4">
+          {/* ---------------- scan result — floating popup ABOVE the camera,
+              never below it and never shifting this layout (owner request,
+              2026-09-11). Absolutely positioned relative to this wrapper and
+              anchored to its own top edge (bottom-full), so it can never
+              push the camera card or the Stop Scanner button down — it's
+              fully out of flow. Auto-closes after 3s via showResult()'s
+              timer; the thin bar at the bottom is a pure CSS animation
+              (scan-toast-bar, globals.css) timed to the same 3000ms, so
+              there's a visual countdown with no numbers. Keyed by
+              resultSeq so the entrance + bar animations restart cleanly
+              even when consecutive scans produce the identical result. */}
+          {result && (
+            <div
+              key={resultSeq}
+              className={`scan-toast-in absolute inset-x-0 bottom-full z-20 mb-2 overflow-hidden rounded-2xl text-white shadow-brand ${
+                result.kind === 'granted' ? 'bg-emerald-600' : result.kind === 'denied' ? 'bg-red-600' : 'bg-amber-600'
+              }`}
+            >
+              <div className="p-4 text-center">
+                {result.kind === 'granted' && (
+                  <>
+                    <p className="text-2xl font-black tracking-wide">ACCESS GRANTED ✓</p>
+                    {result.tag && <p className="mt-1.5 text-base font-semibold">{result.tag}</p>}
+                    {result.serial && <p className="mt-1 font-mono text-sm opacity-90">No. {result.serial}</p>}
+                    {typeof result.usageCount === 'number' && result.usageLimit !== 1 && (
+                      <p className="mt-1 text-xs opacity-80">
+                        Uses: {result.usageCount}{result.usageLimit === null ? ' (unlimited)' : ` of ${result.usageLimit}`}
+                      </p>
+                    )}
+                    <p className="mt-1 text-sm opacity-80">Welcome the guest in</p>
+                  </>
+                )}
+                {result.kind === 'denied' && (
+                  <>
+                    <p className="text-2xl font-black tracking-wide">{result.code === 'ALREADY_USED' ? 'ALREADY USED ✗' : 'DENIED ✗'}</p>
+                    <p className="mt-1.5 text-sm">{result.message}</p>
+                    {result.tag && <p className="mt-1 text-sm font-semibold">{result.tag}</p>}
+                    {result.serial && <p className="mt-1 font-mono text-sm">No. {result.serial}</p>}
+                    {result.firstUsedAt && (
+                      <p className="mt-1 text-xs opacity-80">
+                        First scanned: {new Date(result.firstUsedAt).toLocaleTimeString()} — ask an admin to allow rescan if this was a network error.
+                      </p>
+                    )}
+                  </>
+                )}
+                {result.kind === 'error' && <p className="text-lg font-bold">{result.message}</p>}
+              </div>
+              {/* Countdown line — shrinks to nothing over exactly 3s, no digits. */}
+              <div className="h-1 w-full bg-white/25">
+                <div className="scan-toast-bar h-full w-full bg-white/80" />
+              </div>
+            </div>
+          )}
+
           <div className="relative overflow-hidden rounded-2xl bg-brand-navy-900 shadow-brand" style={{ minHeight: '260px' }}>
             {/* ALWAYS mounted (never display:none/unmounted): qr-scanner
                 attaches its live decode loop directly to this <video>
@@ -636,43 +710,6 @@ export default function ScannerPage() {
             </div>
           </form>
         </div>
-
-        {/* ---------------- scan result — unchanged design + sound ---------------- */}
-        {result && (
-          <div
-            className={`mt-5 rounded-2xl p-6 text-center ${
-              result.kind === 'granted' ? 'bg-emerald-600' : result.kind === 'denied' ? 'bg-red-600' : 'bg-amber-600'
-            } text-white`}
-          >
-            {result.kind === 'granted' && (
-              <>
-                <p className="text-3xl font-black tracking-wide">ACCESS GRANTED ✓</p>
-                {result.tag && <p className="mt-2 text-lg font-semibold">{result.tag}</p>}
-                {result.serial && <p className="mt-1 font-mono text-sm opacity-90">No. {result.serial}</p>}
-                {typeof result.usageCount === 'number' && result.usageLimit !== 1 && (
-                  <p className="mt-1 text-xs opacity-80">
-                    Uses: {result.usageCount}{result.usageLimit === null ? ' (unlimited)' : ` of ${result.usageLimit}`}
-                  </p>
-                )}
-                <p className="mt-1 text-sm opacity-80">Welcome the guest in</p>
-              </>
-            )}
-            {result.kind === 'denied' && (
-              <>
-                <p className="text-3xl font-black tracking-wide">{result.code === 'ALREADY_USED' ? 'ALREADY USED ✗' : 'DENIED ✗'}</p>
-                <p className="mt-2 text-sm">{result.message}</p>
-                {result.tag && <p className="mt-1 text-sm font-semibold">{result.tag}</p>}
-                {result.serial && <p className="mt-1 font-mono text-sm">No. {result.serial}</p>}
-                {result.firstUsedAt && (
-                  <p className="mt-1 text-xs opacity-80">
-                    First scanned: {new Date(result.firstUsedAt).toLocaleTimeString()} — ask an admin to allow rescan if this was a network error.
-                  </p>
-                )}
-              </>
-            )}
-            {result.kind === 'error' && <p className="text-xl font-bold">{result.message}</p>}
-          </div>
-        )}
       </div>
     </main>
   );

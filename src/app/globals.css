@@ -5,3 +5,25 @@
 body {
   @apply bg-brand-ice-50 text-brand-navy-900 antialiased;
 }
+
+/* Scan-result floating toast (owner request, 2026-09-11): pops in above the
+   scanner and auto-closes in 3s via a shrinking line, never a numeric
+   countdown. Kept as plain CSS (not Tailwind arbitrary-animate) so the
+   timing here stays byte-for-byte in sync with showResult()'s
+   RESULT_DISPLAY_MS in src/app/scan/page.tsx — if that ever changes, update
+   scan-toast-bar's duration too. */
+@keyframes scan-toast-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes scan-toast-bar {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+.scan-toast-in {
+  animation: scan-toast-in 180ms ease-out;
+}
+.scan-toast-bar {
+  transform-origin: left;
+  animation: scan-toast-bar 3000ms linear forwards;
+}

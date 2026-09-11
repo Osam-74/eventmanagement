@@ -25,7 +25,7 @@ export function shouldSubmitToken(state: SubmitGateState, token: string, now: nu
  * Battery-saving auto-sleep (owner request, 2026-09-11): if the camera has
  * been running with no scan actually PROCESSED (accepted or denied — a
  * genuine attempt) for INACTIVITY_SLEEP_MS, the scanner should pause
- * itself exactly as if the usher had tapped "Pause scanner". This is
+ * itself exactly as if the usher had tapped "Stop Scanner". This is
  * deliberately keyed off real scan attempts, not mere decode-loop frames
  * (those land continuously regardless of whether anyone is actually being
  * checked in) and not merely "the page is open" — a quiet stretch between

@@ -13,7 +13,7 @@ import { deriveTemplateGeometry } from '@/lib/invitation/geometry';
  * E2E PWA + routing/authentication suite against the real production build
  * served by `next start`, backed by the Firestore + Firebase Auth
  * emulators. Proves:
- *  - unified entry page (ADMIN | USHER) with the approved wording only
+ *  - unified entry page (Admin | Usher role cards) with the approved wording only
  *  - PIN-only usher login (Flo-style PIN pad: dots, keypad, auto-submit,
  *    shake feedback, welcome overlay) — no name, no event selection
  *  - /scan protection (unauthenticated → usher login)
@@ -144,27 +144,27 @@ describe('unified entry page (approved wording only)', () => {
   it('/ presents exactly the approved Event Access Control wording', async () => {
     await page.goto(BASE, { waitUntil: 'networkidle' });
     await expectVisible(page.getByText('Event Access Control'));
-    await expectVisible(page.getByText('Please select your user type to login.'));
-    await expectVisible(page.getByRole('link', { name: /^ADMIN$/ }));
-    await expectVisible(page.getByRole('link', { name: /^USHER$/ }));
+    await expectVisible(page.getByText("Choose how you'd like to continue"));
+    await expectVisible(page.getByRole('link', { name: /^Admin$/ }));
+    await expectVisible(page.getByRole('link', { name: /^Usher$/ }));
     const body = (await page.locator('body').innerText()).toLowerCase();
     expect(body).not.toContain('wedding');
     expect(body).not.toContain('event management & dashboard');
     expect(body).not.toContain('gate qr scanning');
   });
 
-  it('ADMIN choice leads to /login (email/password administrator sign-in)', async () => {
+  it('Admin choice leads to /login (email/password administrator sign-in)', async () => {
     await page.goto(BASE, { waitUntil: 'networkidle' });
-    await page.getByRole('link', { name: /^ADMIN$/ }).click();
+    await page.getByRole('link', { name: /^Admin$/ }).click();
     await page.waitForURL(`${BASE}/login`);
     await expectVisible(page.getByText('Administrator sign-in'));
     await expectVisible(page.locator('input[type="email"]'));
     await expectVisible(page.locator('input[type="password"]'));
   });
 
-  it('USHER choice leads to the PIN pad — no name input, no event selector, no email', async () => {
+  it('Usher choice leads to the PIN pad — no name input, no event selector, no email', async () => {
     await page.goto(BASE, { waitUntil: 'networkidle' });
-    await page.getByRole('link', { name: /^USHER$/ }).click();
+    await page.getByRole('link', { name: /^Usher$/ }).click();
     await page.waitForURL(`${BASE}/usher/login`);
     await expectVisible(page.getByText('Enter your PIN'));
     // The pad has exactly 10 digit keys (0-9), delete, and confirm.
@@ -501,7 +501,7 @@ describe('camera start', () => {
       await p.getByRole('button', { name: /Start Scanner/ }).click();
       // the video element actually starts playing = getUserMedia really ran
       await expectVisible(p.locator('#qr-video'), 30000);
-      await expectVisible(p.getByRole('button', { name: /Pause scanner/i }), 10000);
+      await expectVisible(p.getByRole('button', { name: /Stop Scanner/i }), 10000);
       // no error banner
       expect(await p.getByText(/Could not start the camera|Camera permission was denied/i).count()).toBe(0);
       await ctx.close();
@@ -613,7 +613,7 @@ describe('QR decode — the camera actually READS a code and checks it in', () =
       const snap = await inv.ref.get();
       expect(snap.data()?.status).toBe('used');
       await expectVisible(p.getByText('ALREADY USED ✗', { exact: true }), 15000);
-      await p.getByRole('button', { name: 'Pause scanner' }).click();
+      await p.getByRole('button', { name: 'Stop Scanner' }).click();
       const stoppedCount = scanRequests;
       await p.waitForTimeout(3000);
       expect(scanRequests).toBe(stoppedCount);

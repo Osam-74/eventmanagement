@@ -41,6 +41,44 @@ function beep(good: boolean) {
   if (navigator.vibrate) navigator.vibrate(good ? 80 : [100, 60, 100]);
 }
 
+// Good morning / afternoon / evening — purely cosmetic and computed only
+// once this authenticated screen actually renders (session is always null
+// during the initial SSR pass, so there is no hydration-mismatch risk here).
+function getGreeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning,';
+  if (h < 18) return 'Good afternoon,';
+  return 'Good evening,';
+}
+
+function ScanFrameIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path
+        d="M4 8V6a2 2 0 0 1 2-2h2M4 16v2a2 2 0 0 0 2 2h2M20 8V6a2 2 0 0 0-2-2h-2M20 16v2a2 2 0 0 1-2 2h-2"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+      <rect x="9" y="9" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
+function SignOutIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path
+        d="M15 17l4-5-4-5M19 12H8M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export default function ScannerPage() {
   const router = useRouter();
 
@@ -147,9 +185,9 @@ export default function ScannerPage() {
 
   // Battery-saving auto-sleep: while the camera is running, check every 15s
   // for a full INACTIVITY_SLEEP_MS stretch with no scan actually processed.
-  // Reuses the exact same stopScanner() path as the manual "Pause scanner"
+  // Reuses the exact same stopScanner() path as the manual "Stop Scanner"
   // button, so it lands in the identical, already-tested paused state (the
-  // "Start Scanner" button reappears normally — no new control needed).
+  // "Start Scanner" card reappears normally — no new control needed).
   useEffect(() => {
     if (!scanning) return;
     inactivityTimerRef.current = setInterval(() => {
@@ -174,6 +212,14 @@ export default function ScannerPage() {
     setSession(null);
     setScanning(false);
     router.replace('/usher/login');
+  }
+
+  // A stray tap at an event entrance must never end a session by accident —
+  // confirm before actually signing out (owner request, 2026-09-11).
+  function confirmSignOut() {
+    if (window.confirm('Sign out? You will need to enter your PIN again to resume scanning.')) {
+      void signOut();
+    }
   }
 
   async function submitToken(token: string, gateId?: string | null) {
@@ -334,8 +380,13 @@ export default function ScannerPage() {
             void stopScanner();
             setCameraError('QR decoder failed. Tap Start Scanner to retry, or use manual entry.');
           },
-          highlightScanRegion: true,
-          highlightCodeOutline: true,
+          // The library's own aim-assist overlay is replaced by our own
+          // on-brand corner-bracket frame drawn in JSX below (pure CSS/SVG
+          // sitting on top of the video, disabled here to avoid a double
+          // overlay) — this flag pair is documented as a purely cosmetic
+          // aim-assist aid with zero effect on decode behavior.
+          highlightScanRegion: false,
+          highlightCodeOutline: false,
           maxScansPerSecond: 15,
           preferredCamera: 'environment',
           returnDetailedScanResult: true,
@@ -398,105 +449,159 @@ export default function ScannerPage() {
   // ---------------- gate: session required ----------------
   if (!session) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-brand-navy-900">
-        <p className="text-brand-ice-200/60">{checking ? 'Loading…' : 'Redirecting to usher sign-in…'}</p>
+      <main className="flex min-h-screen items-center justify-center bg-brand-blush">
+        <p className="text-brand-navy-700/60">{checking ? 'Loading…' : 'Redirecting to usher sign-in…'}</p>
       </main>
     );
   }
 
   // ---------------- scanner screen ----------------
   const disabledBanner = !session.scanningEnabled;
+  const initial = session.usherName.trim().charAt(0).toUpperCase() || '?';
 
   return (
-    <main className="min-h-screen bg-brand-navy-900 text-white">
-      <div className="mx-auto max-w-md px-4 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {/* Connectivity beacon — a beaming dot beside the usher's name
-                instead of a plain "Online" text label (owner decision
-                2026-09-10). The status word is still present for screen
-                readers (and kept EXACTLY as before for automated checks —
-                "Online" / "No Internet") via sr-only text on the beacon;
-                sighted users just see the light. */}
-            <span className="relative flex h-2.5 w-2.5 shrink-0" title={online ? 'Online' : 'No Internet'}>
-              {online && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-teal-400 opacity-75" />}
-              <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${online ? 'bg-brand-teal-400' : 'bg-red-500'}`} />
-              <span className="sr-only">{online ? 'Online' : 'No Internet'}</span>
+    <main className="min-h-screen bg-brand-blush text-brand-navy-900">
+      <div className="mx-auto max-w-md px-4 py-4 pb-8" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}>
+        {/* ---------------- identity header ---------------- */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-navy-900 text-base font-semibold text-white">
+              {initial}
+              {/* Connectivity beacon — a beaming dot on the avatar instead of
+                  a plain "Online" text label (owner decision 2026-09-10).
+                  The status word is still present for screen readers (and
+                  kept EXACTLY as before for automated checks — "Online" /
+                  "No Internet") via sr-only text on the beacon. */}
+              <span
+                className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-brand-blush ring-2 ring-brand-blush"
+                title={online ? 'Online' : 'No Internet'}
+              >
+                {online && <span className="absolute inline-flex h-2.5 w-2.5 animate-ping rounded-full bg-emerald-400 opacity-75" />}
+                <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${online ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                <span className="sr-only">{online ? 'Online' : 'No Internet'}</span>
+              </span>
             </span>
-            <div>
-              <p className="font-semibold">{session.usherName}</p>
-              <p className="text-sm text-brand-ice-200/60">
+            <div className="min-w-0">
+              <p className="truncate text-xs font-medium text-brand-navy-700/55">{getGreeting()}</p>
+              <p className="truncate text-base font-semibold leading-tight text-brand-navy-900">{session.usherName}</p>
+              <p className="truncate text-xs text-brand-navy-700/50">
                 {session.eventName} {session.gateId ? `· Gate: ${session.gateId}` : ''}
               </p>
             </div>
           </div>
-          <button onClick={signOut} className="rounded-lg border border-white/20 px-3 py-1.5 text-sm hover:bg-white/5">
-            Sign out
+          <button
+            onClick={confirmSignOut}
+            aria-label="Sign out"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-brand-ice-200 bg-white text-brand-navy-700/60 shadow-sm transition hover:border-red-200 hover:text-red-600 active:scale-95"
+          >
+            <SignOutIcon className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-2 text-xs">
-          <span className={`rounded px-2 py-1 ${session.scanningEnabled ? 'bg-emerald-600' : 'bg-red-600'}`}>
-            {session.scanningEnabled ? 'Scanning ACTIVE' : 'EVENT NOT OPEN'}
+        {/* ---------------- status pills ---------------- */}
+        <div className="mt-3.5 flex flex-wrap items-center gap-2">
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
+              session.scanningEnabled ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+            }`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${session.scanningEnabled ? 'bg-emerald-500' : 'bg-red-500'}`} />
+            {session.scanningEnabled ? 'Scanner ready' : 'Scanning disabled'}
           </span>
-          <span className="rounded bg-white/10 px-2 py-1">Admitted: {session.acceptedCount}</span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-ice-100 px-3 py-1 text-xs font-semibold text-brand-navy-800">
+            {session.acceptedCount} Admitted
+          </span>
         </div>
 
         {disabledBanner && (
-          <div className="mt-4 rounded-lg bg-red-600 p-4 text-center text-lg font-bold">
+          <div className="mt-4 rounded-xl bg-red-600 p-4 text-center text-lg font-bold text-white">
             EVENT NOT OPEN — SCANNING DISABLED
           </div>
         )}
 
         {cameraError && (
-          <div className="mt-4 rounded-lg bg-amber-600 p-4 text-sm font-medium">{cameraError}</div>
+          <div className="mt-4 rounded-xl bg-amber-50 p-4 text-sm font-medium text-amber-800 ring-1 ring-amber-200">{cameraError}</div>
         )}
 
+        {/* ---------------- camera card: idle / active ---------------- */}
         <div className="mt-4">
-          {/* ALWAYS mounted (never display:none/unmounted): qr-scanner attaches
-              its live decode loop directly to this <video> element, so it must
-              already exist in the DOM before start() runs. muted+playsInline
-              are required for iOS Safari to actually play the stream inline
-              instead of forcing fullscreen (which breaks frame capture).
-              min-h ensures it never collapses to 0px before video metadata
-              loads — a zero-size element was one of the candidate causes of
-              "camera looks on but nothing scans" and costs nothing to rule out. */}
-          <video
-            id="qr-video"
-            ref={videoRef}
-            muted
-            playsInline
-            style={{ minHeight: '260px' }}
-            className="w-full rounded-xl bg-brand-navy-950 object-cover"
-          />
+          <div className="relative overflow-hidden rounded-2xl bg-brand-navy-900 shadow-brand" style={{ minHeight: '260px' }}>
+            {/* ALWAYS mounted (never display:none/unmounted): qr-scanner
+                attaches its live decode loop directly to this <video>
+                element, so it must already exist in the DOM — visible,
+                normal display — before start() runs. muted+playsInline are
+                required for iOS Safari to actually play the stream inline
+                instead of forcing fullscreen (which breaks frame capture).
+                The idle/active covers below are opaque SIBLING overlays
+                stacked on top of it, never a toggle of its own
+                display/visibility — a zero-size or hidden video was one of
+                the candidate causes of "camera looks on but nothing scans"
+                and this keeps that risk at zero. */}
+            <video
+              id="qr-video"
+              ref={videoRef}
+              muted
+              playsInline
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+
+            {!scanning && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-brand-teal-400">
+                  <ScanFrameIcon className="h-6 w-6" />
+                </span>
+                <div>
+                  <p className="text-lg font-semibold text-white">Ready to scan</p>
+                  <p className="mt-1 text-sm text-brand-ice-200/60">Scan the access code on the invitation</p>
+                </div>
+                <button
+                  onClick={() => startScanner()}
+                  disabled={starting || processing}
+                  className="mt-1 rounded-full bg-brand-teal-400 px-8 py-3 text-base font-semibold text-brand-navy-950 shadow-brand transition active:scale-95 disabled:opacity-50"
+                >
+                  {starting ? 'Starting camera…' : 'Start Scanner'}
+                </button>
+              </div>
+            )}
+
+            {scanning && (
+              // Purely decorative targeting frame drawn on top of the live
+              // video — pointer-events-none, no effect on the decode loop,
+              // which reads frames directly off the <video> element itself.
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <div className="relative h-[60%] w-[60%] max-h-64 max-w-64">
+                  <span className="absolute left-0 top-0 h-8 w-8 rounded-tl-lg border-l-2 border-t-2 border-brand-teal-400" />
+                  <span className="absolute right-0 top-0 h-8 w-8 rounded-tr-lg border-r-2 border-t-2 border-brand-teal-400" />
+                  <span className="absolute bottom-0 left-0 h-8 w-8 rounded-bl-lg border-b-2 border-l-2 border-brand-teal-400" />
+                  <span className="absolute bottom-0 right-0 h-8 w-8 rounded-br-lg border-b-2 border-r-2 border-brand-teal-400" />
+                </div>
+              </div>
+            )}
+          </div>
+
           {scanning && (
-            <button onClick={stopScanner} className="mt-3 w-full rounded-lg border border-white/20 py-2 text-sm hover:bg-white/5">
-              Pause scanner
+            <button
+              onClick={stopScanner}
+              className="mt-3 w-full rounded-xl border border-brand-ice-200 bg-white py-2.5 text-sm font-medium text-brand-navy-700 shadow-sm transition hover:bg-brand-ice-50 active:scale-[0.99]"
+            >
+              Stop Scanner
             </button>
           )}
         </div>
 
-        {!scanning ? (
-          <div className="mt-8 text-center">
-            <button
-              onClick={() => startScanner()}
-              disabled={starting || processing}
-              className="w-full rounded-2xl bg-emerald-600 py-6 text-2xl font-bold disabled:opacity-50"
-            >
-              {starting ? 'Starting camera…' : '▶ Start Scanner'}
-            </button>
-          </div>
-        ) : (
-          <p role="status" data-decoder-ready={decoderReady} className="mt-2 text-center text-sm text-brand-ice-200/60">
+        {scanning && (
+          <p role="status" data-decoder-ready={decoderReady} className="mt-2 text-center text-sm text-brand-navy-700/55">
             {processing ? 'Processing invitation…' : decoderReady ? 'Scanner ready — point the camera at the invitation QR.' : 'Camera live — waiting for the QR decoder…'}
           </p>
         )}
 
-        {/* Manual entry: always available, including while the camera runs.
-            Type the serial number printed on the card — with or without the
-            hyphen, any case; the server matches both stored serial shapes. */}
+        {/* Manual entry: always available, including while the camera runs —
+            deliberately secondary in weight (muted border, smaller type)
+            but never hidden behind a toggle. Type the serial number printed
+            on the card — with or without the hyphen, any case; the server
+            matches both stored serial shapes. */}
         <div className="mt-6 text-left">
-          <label htmlFor="manual-entry" className="text-sm text-brand-ice-200/60">
+          <label htmlFor="manual-entry" className="text-xs font-medium text-brand-navy-700/50">
             Manual entry — type the serial on the card
           </label>
           <form
@@ -507,7 +612,7 @@ export default function ScannerPage() {
               el.value = '';
             }}
           >
-            <div className="mt-1 flex gap-2">
+            <div className="mt-1.5 flex gap-2">
               <input
                 name="manual"
                 id="manual-entry"
@@ -516,11 +621,11 @@ export default function ScannerPage() {
                 autoCorrect="off"
                 autoComplete="off"
                 spellCheck={false}
-                className="w-full rounded-lg border border-white/20 bg-white/5 px-3 py-2 font-mono uppercase tracking-wide text-white focus:border-brand-teal-400 focus:outline-none"
+                className="w-full rounded-lg border border-brand-ice-200 bg-white px-3 py-2 font-mono text-sm uppercase tracking-wide text-brand-navy-900 focus:border-brand-blue-400 focus:outline-none"
               />
               <button
                 type="submit"
-                className="shrink-0 rounded-lg bg-brand-teal-500 px-5 py-2 font-semibold text-brand-navy-950 hover:bg-brand-teal-400"
+                className="shrink-0 rounded-lg border border-brand-ice-200 bg-white px-4 py-2 text-sm font-semibold text-brand-navy-700 shadow-sm transition hover:bg-brand-ice-50"
               >
                 Check
               </button>
@@ -528,11 +633,12 @@ export default function ScannerPage() {
           </form>
         </div>
 
+        {/* ---------------- scan result — unchanged design + sound ---------------- */}
         {result && (
           <div
             className={`mt-5 rounded-2xl p-6 text-center ${
               result.kind === 'granted' ? 'bg-emerald-600' : result.kind === 'denied' ? 'bg-red-600' : 'bg-amber-600'
-            }`}
+            } text-white`}
           >
             {result.kind === 'granted' && (
               <>

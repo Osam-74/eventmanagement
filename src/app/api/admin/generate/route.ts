@@ -6,7 +6,7 @@ import { writeAudit } from '@/lib/audit';
 import { generateQrToken } from '@/lib/qr/token';
 import { digestToken } from '@/lib/qr/digest';
 import { formatSerial } from '@/lib/invitation/serial';
-import { resolveSerialGeometry, resolveQrBoxGeometry, resolveAccessLabelGeometry } from '@/lib/invitation/geometry';
+import { resolveSerialGeometry, resolveQrBoxGeometry, resolveAccessLabelGeometry, resolveQrGeometry } from '@/lib/invitation/geometry';
 import { renderInvitationImage } from '@/lib/invitation/render';
 import { FieldValue } from 'firebase-admin/firestore';
 
@@ -48,10 +48,14 @@ export async function POST(req: NextRequest) {
   // Anchored to THIS template's actual qr box (not recomputed independently) —
   // guarantees the serial always lands directly under the real QR, even for
   // templates uploaded before serial support (which have no stored geometry).
+  // BUG fix (2026-09-11): recompute from the current ratios, never read the
+  // position frozen on the template document at upload time — see
+  // resolveQrGeometry() in geometry.ts.
+  const qrGeometry = resolveQrGeometry(template.canvasWidth as number, template.canvasHeight as number);
   const serialGeometry = resolveSerialGeometry({
     canvasWidth: template.canvasWidth as number,
     canvasHeight: template.canvasHeight as number,
-    qr: template.qr as { x: number; y: number; size: number },
+    qr: qrGeometry,
     serial: template.serial as never,
   });
 
@@ -61,7 +65,7 @@ export async function POST(req: NextRequest) {
   const accessLabelGeometry = resolveAccessLabelGeometry({
     canvasWidth: template.canvasWidth as number,
     canvasHeight: template.canvasHeight as number,
-    qr: template.qr as { x: number; y: number; size: number },
+    qr: qrGeometry,
   });
 
   // create batch record
@@ -108,7 +112,7 @@ export async function POST(req: NextRequest) {
         geometry: {
           canvasWidth: template.canvasWidth as number,
           canvasHeight: template.canvasHeight as number,
-          qr: template.qr as { x: number; y: number; size: number },
+          qr: qrGeometry,
           accessLabel: accessLabelGeometry,
           serial: serialGeometry,
           qrBox: resolveQrBoxGeometry(template.qrBox as never),

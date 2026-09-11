@@ -3,7 +3,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import type { bucket as bucketFn } from '@/lib/firebase/admin';
 import { generateQrToken } from '@/lib/qr/token';
 import { digestToken } from '@/lib/qr/digest';
-import { resolveSerialGeometry, resolveQrBoxGeometry, resolveAccessLabelGeometry } from '@/lib/invitation/geometry';
+import { resolveSerialGeometry, resolveQrBoxGeometry, resolveAccessLabelGeometry, resolveQrGeometry } from '@/lib/invitation/geometry';
 import { renderInvitationImage } from '@/lib/invitation/render';
 
 type Bucket = ReturnType<typeof bucketFn>;
@@ -214,23 +214,27 @@ export async function regenerateInvitationImage(
   const [masterFile] = await bucket.file(template.storagePath as string).download();
   const token = generateQrToken();
   const digest = digestToken(token);
+  // BUG fix (2026-09-11): recompute from the current ratios, never read the
+  // position frozen on the template document at upload time — see
+  // resolveQrGeometry() in geometry.ts.
+  const qrGeometry = resolveQrGeometry(template.canvasWidth as number, template.canvasHeight as number);
   const serialGeometry = resolveSerialGeometry({
     canvasWidth: template.canvasWidth as number,
     canvasHeight: template.canvasHeight as number,
-    qr: template.qr as { x: number; y: number; size: number },
+    qr: qrGeometry,
     serial: template.serial as never,
   });
   const accessLabelGeometry = resolveAccessLabelGeometry({
     canvasWidth: template.canvasWidth as number,
     canvasHeight: template.canvasHeight as number,
-    qr: template.qr as { x: number; y: number; size: number },
+    qr: qrGeometry,
   });
   const image = await renderInvitationImage({
     templateBuffer: masterFile,
     geometry: {
       canvasWidth: template.canvasWidth as number,
       canvasHeight: template.canvasHeight as number,
-      qr: template.qr as { x: number; y: number; size: number },
+      qr: qrGeometry,
       accessLabel: accessLabelGeometry,
       serial: serialGeometry,
       qrBox: resolveQrBoxGeometry(template.qrBox as never),

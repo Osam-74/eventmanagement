@@ -155,12 +155,24 @@ export function serialGeometryBelowQr(
 }
 
 /**
- * Scales the approved normalized placement to the actual master artwork
- * dimensions. Every template gets the gold QR box and "ACCESS CODE" label
- * automatically — there is no opt-out and nothing to pass in.
+ * Scales the approved normalized QR placement to the actual master artwork
+ * dimensions, from the CURRENT ratios — never from whatever position was
+ * stored on the template document at upload time.
+ *
+ * BUG fixed 2026-09-11: every position nudge to QR_Y_RATIO today had ZERO
+ * effect on the template already live in production, because both real
+ * render call sites (api/admin/generate and the regenerate-replacement-
+ * card flow) read `template.qr` straight off the stored Firestore
+ * document — a snapshot frozen at whatever QR_Y_RATIO was the moment that
+ * template was uploaded — instead of recomputing it. qrBox, the "ACCESS
+ * CODE" label, and the serial were already built to always resolve fresh
+ * from the current code, ignoring anything stored; the QR's own position
+ * was the one piece that wasn't, so nothing visibly moved. Call sites now
+ * use this function instead of `template.qr`, matching the same
+ * always-current, no-migration-needed pattern as everything else.
  */
-export function deriveTemplateGeometry(canvasWidth: number, canvasHeight: number): TemplateGeometry {
-  const qr = {
+export function resolveQrGeometry(canvasWidth: number, canvasHeight: number): TemplateGeometry['qr'] {
+  return {
     x: Math.round(QR_X_RATIO * canvasWidth),
     y: Math.round(QR_Y_RATIO * canvasHeight),
     size: Math.round(QR_W_RATIO * canvasWidth),
@@ -168,6 +180,15 @@ export function deriveTemplateGeometry(canvasWidth: number, canvasHeight: number
     yRatio: QR_Y_RATIO,
     widthRatio: QR_W_RATIO,
   };
+}
+
+/**
+ * Scales the approved normalized placement to the actual master artwork
+ * dimensions. Every template gets the gold QR box and "ACCESS CODE" label
+ * automatically — there is no opt-out and nothing to pass in.
+ */
+export function deriveTemplateGeometry(canvasWidth: number, canvasHeight: number): TemplateGeometry {
+  const qr = resolveQrGeometry(canvasWidth, canvasHeight);
   return {
     canvasWidth,
     canvasHeight,

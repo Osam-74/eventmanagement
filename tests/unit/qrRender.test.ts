@@ -30,12 +30,12 @@ describe('QR artwork decode pipeline', () => {
     });
   }
 
-  it('auto QR box (owner request 2026-09-11) never obstructs decoding — the gold frame sits entirely outside the QR footprint', async () => {
+  it('the gold QR box, drawn automatically for every template, never obstructs decoding — it sits entirely outside the QR footprint', async () => {
     const token = 'IS26.' + 'Abcdef0123456789_-'.repeat(3).slice(0, 43);
     const templateBuffer = await sharp({ create: { width: 1070, height: 1470, channels: 3, background: '#ffffff' } })
       .png()
       .toBuffer();
-    const geometry = deriveTemplateGeometry(1070, 1470, { qrBoxStyle: 'auto' });
+    const geometry = deriveTemplateGeometry(1070, 1470);
     const { buffer } = await renderInvitationImage({
       templateBuffer, geometry, qrToken: token, serial: 'TEST00002', profile: 'share',
     });

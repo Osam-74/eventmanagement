@@ -14,12 +14,11 @@ export type TemplateGeometry = {
     color: string;
     plate?: boolean;
   };
-  // Optional — omitted (or style 'template') reproduces the exact output
-  // this function always produced: no extra overlay, the master artwork's
-  // own hand-drawn frame is what the viewer sees around the QR. Only
-  // style 'auto' draws anything here. See src/lib/invitation/geometry.ts.
+  // Every template gets this drawn automatically (owner decision
+  // 2026-09-11) — kept optional here only so a caller that genuinely omits
+  // it entirely (e.g. an old test fixture) just skips the extra overlay
+  // instead of crashing. See src/lib/invitation/geometry.ts.
   qrBox?: {
-    style: 'template' | 'auto';
     color: string;
     strokeWidthRatio: number;
     paddingRatio: number;
@@ -93,13 +92,11 @@ export async function renderInvitationImage(opts: {
 
   const overlays: sharp.OverlayOptions[] = [];
 
-  // Auto-drawn QR box (owner request 2026-09-11): a gold-stroked frame
-  // rendered ENTIRELY OUTSIDE the qrX/qrY/qrSize footprint — padding always
-  // pushes it outward, never inward — so it can never touch, let alone
-  // cover, a single QR module. Only style 'auto' draws this; every
-  // template without it (i.e. all of them until an admin opts in) gets
-  // this array empty, identical to before this feature existed.
-  if (geometry.qrBox?.style === 'auto') {
+  // Gold QR box, drawn automatically for every template (owner decision
+  // 2026-09-11) — a gold-stroked frame rendered ENTIRELY OUTSIDE the
+  // qrX/qrY/qrSize footprint. Padding always pushes it outward, never
+  // inward, so it can never touch, let alone cover, a single QR module.
+  if (geometry.qrBox) {
     const pad = Math.round(qrSize * geometry.qrBox.paddingRatio);
     const stroke = Math.max(1, Math.round(qrSize * geometry.qrBox.strokeWidthRatio));
     const radius = Math.round(qrSize * geometry.qrBox.cornerRadiusRatio);

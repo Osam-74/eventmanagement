@@ -7,18 +7,11 @@ export const QR_Y_RATIO = 0.663265;
 export const QR_W_RATIO = 0.220561;
 
 // Same gold already used for the printed serial (#C5A059) — reused here so
-// an auto-drawn QR box and the serial text always read as one consistent
-// brand treatment.
+// the QR box and the serial text always read as one consistent brand
+// treatment.
 export const QR_BOX_GOLD = '#C5A059';
 
 export type QrBoxGeometry = {
-  // 'template' (default, unchanged behaviour): the master artwork already
-  // has its own hand-drawn frame at the approved QR ratios — the renderer
-  // draws nothing extra, exactly like every template today.
-  // 'auto': the renderer itself draws a gold-stroked box around the QR, so
-  // the artwork no longer needs a hand-drawn frame at that exact spot —
-  // owner request 2026-09-11.
-  style: 'template' | 'auto';
   color: string;
   // All three ratios are relative to qr.size, so the box scales cleanly
   // with the QR at every output resolution, just like the QR itself.
@@ -35,10 +28,14 @@ export type TemplateGeometry = {
   qrBox: QrBoxGeometry;
 };
 
-/** The one place the auto-box's default look is defined. */
-export function defaultQrBox(style: QrBoxGeometry['style'] = 'template'): QrBoxGeometry {
+/**
+ * Owner decision (2026-09-11): EVERY template gets a gold box drawn around
+ * its QR automatically, unconditionally — no per-template opt-in, no
+ * artwork-drawn frame required. This is the one place that look is
+ * defined.
+ */
+export function defaultQrBox(): QrBoxGeometry {
   return {
-    style,
     color: QR_BOX_GOLD,
     strokeWidthRatio: 0.022,
     paddingRatio: 0.07,
@@ -48,17 +45,15 @@ export function defaultQrBox(style: QrBoxGeometry['style'] = 'template'): QrBoxG
 
 /**
  * Fills in any missing pieces of a stored qrBox with the approved
- * defaults, and — critically — treats a completely absent/invalid field as
- * `{ style: 'template' }`. Every template document written before this
- * feature existed has no `qrBox` field at all; this must resolve those to
- * "draw nothing extra", identical to today's behaviour, not silently start
- * drawing a new box on artwork nobody designed for one.
+ * defaults. A template document written before this feature existed has
+ * no qrBox field at all (or may carry an old `{ style: 'template' }`
+ * shape from a short-lived opt-in version) — both resolve to the same
+ * drawn gold box now, so every template — old or new — gets it the next
+ * time a card is generated or regenerated, with no migration needed.
  */
 export function resolveQrBoxGeometry(stored?: Partial<QrBoxGeometry> | null): QrBoxGeometry {
-  const style: QrBoxGeometry['style'] = stored?.style === 'auto' ? 'auto' : 'template';
-  const base = defaultQrBox(style);
+  const base = defaultQrBox();
   return {
-    style,
     color: stored?.color ?? base.color,
     strokeWidthRatio: stored?.strokeWidthRatio ?? base.strokeWidthRatio,
     paddingRatio: stored?.paddingRatio ?? base.paddingRatio,
@@ -100,15 +95,10 @@ export function serialGeometryBelowQr(
 
 /**
  * Scales the approved normalized placement to the actual master artwork
- * dimensions. `qrBoxStyle` defaults to 'template' — passing nothing at all
- * reproduces the exact QR/serial geometry this function always returned,
- * for every existing call site.
+ * dimensions. Every template gets the gold QR box automatically — there is
+ * no opt-out and nothing to pass in.
  */
-export function deriveTemplateGeometry(
-  canvasWidth: number,
-  canvasHeight: number,
-  opts?: { qrBoxStyle?: QrBoxGeometry['style'] }
-): TemplateGeometry {
+export function deriveTemplateGeometry(canvasWidth: number, canvasHeight: number): TemplateGeometry {
   const qr = {
     x: Math.round(QR_X_RATIO * canvasWidth),
     y: Math.round(QR_Y_RATIO * canvasHeight),
@@ -122,7 +112,7 @@ export function deriveTemplateGeometry(
     canvasHeight,
     qr,
     serial: serialGeometryBelowQr(qr, canvasWidth, canvasHeight),
-    qrBox: defaultQrBox(opts?.qrBoxStyle ?? 'template'),
+    qrBox: defaultQrBox(),
   };
 }
 

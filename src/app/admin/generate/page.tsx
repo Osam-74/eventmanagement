@@ -150,29 +150,14 @@ export default function GeneratePage() {
     <div className="max-w-3xl space-y-6">
       <form onSubmit={generate} className="rounded-xl border border-brand-ice-200 bg-white p-4 shadow-sm">
         <h2 className="mb-3 font-semibold text-brand-navy-900">Generate invitation cards</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="text-sm text-brand-navy-800">
-            Quantity (1–50)
-            <input
-              type="number" min={1} max={50} value={quantity}
-              onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
-              className={inputCls}
-            />
-          </label>
-          <label className="text-sm text-brand-navy-800">
-            Output profile
-            <select value={profile} onChange={(e) => setProfile(e.target.value as 'share' | 'hq')} className={inputCls}>
-              <option value="share">Share (WhatsApp/email, 3000px)</option>
-              <option value="hq">HQ / archive (8K)</option>
-            </select>
-          </label>
-        </div>
-
+        {/* Field order (owner request, 2026-09-12): Card Type first,
+            then Quantity, then the conditional Tag, then Uses per card,
+            with Output profile last. */}
         {/* Card Type (owner request, 2026-09-12): Regular hides the Tag
             field entirely and defaults to standard serial-numbered cards.
             Special reveals the Tag field and requires an input (e.g. VIP,
             FAMILY) — that tag prints on the card instead of the serial. */}
-        <div className="mt-3 border-t border-brand-ice-100 pt-3">
+        <div className="pt-0">
           <span className="text-sm text-brand-navy-800">Card Type</span>
           <div className="mt-1 flex gap-4">
             <label className="flex items-center gap-2 text-sm text-brand-navy-800">
@@ -200,6 +185,14 @@ export default function GeneratePage() {
         </div>
 
         <div className="mt-3 grid gap-3 border-t border-brand-ice-100 pt-3 sm:grid-cols-2">
+          <label className="text-sm text-brand-navy-800">
+            Quantity (1–50)
+            <input
+              type="number" min={1} max={50} value={quantity}
+              onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+              className={inputCls}
+            />
+          </label>
           {cardType === 'special' && (
             <label className="text-sm text-brand-navy-800">
               Tag (required — replaces the serial on the card)
@@ -217,6 +210,9 @@ export default function GeneratePage() {
               )}
             </label>
           )}
+        </div>
+
+        <div className="mt-3 grid gap-3 border-t border-brand-ice-100 pt-3 sm:grid-cols-2">
           <label className="text-sm text-brand-navy-800">
             Uses per card (optional)
             <input
@@ -227,6 +223,13 @@ export default function GeneratePage() {
             <span className="mt-1 block text-xs text-brand-navy-700/50">
               Leave blank for unlimited uses. 1 (default) behaves exactly like today&apos;s single-use cards.
             </span>
+          </label>
+          <label className="text-sm text-brand-navy-800">
+            Output profile
+            <select value={profile} onChange={(e) => setProfile(e.target.value as 'share' | 'hq')} className={inputCls}>
+              <option value="share">Share (WhatsApp/email, 3000px)</option>
+              <option value="hq">HQ / archive (8K)</option>
+            </select>
           </label>
         </div>
         <div className="mt-4 flex flex-wrap items-center justify-end gap-3">

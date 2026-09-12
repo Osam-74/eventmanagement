@@ -549,60 +549,6 @@ export default function ScannerPage() {
 
         {/* ---------------- camera card: idle / active ---------------- */}
         <div className="relative mt-4">
-          {/* ---------------- scan result — floating popup ABOVE the camera,
-              never below it and never shifting this layout (owner request,
-              2026-09-11). Absolutely positioned relative to this wrapper and
-              anchored to its own top edge (bottom-full), so it can never
-              push the camera card or the Stop Scanner button down — it's
-              fully out of flow. Auto-closes after 3s via showResult()'s
-              timer; the thin bar at the bottom is a pure CSS animation
-              (scan-toast-bar, globals.css) timed to the same 3000ms, so
-              there's a visual countdown with no numbers. Keyed by
-              resultSeq so the entrance + bar animations restart cleanly
-              even when consecutive scans produce the identical result. */}
-          {result && (
-            <div
-              key={resultSeq}
-              className={`scan-toast-in absolute inset-x-0 bottom-full z-20 mb-2 overflow-hidden rounded-2xl text-white shadow-brand ${
-                result.kind === 'granted' ? 'bg-emerald-600' : result.kind === 'denied' ? 'bg-red-600' : 'bg-amber-600'
-              }`}
-            >
-              <div className="p-4 text-center">
-                {result.kind === 'granted' && (
-                  <>
-                    <p className="text-2xl font-black tracking-wide">ACCESS GRANTED ✓</p>
-                    {result.tag && <p className="mt-1.5 text-base font-semibold">{result.tag}</p>}
-                    {result.serial && <p className="mt-1 font-mono text-sm opacity-90">No. {result.serial}</p>}
-                    {typeof result.usageCount === 'number' && result.usageLimit !== 1 && (
-                      <p className="mt-1 text-xs opacity-80">
-                        Uses: {result.usageCount}{result.usageLimit === null ? ' (unlimited)' : ` of ${result.usageLimit}`}
-                      </p>
-                    )}
-                    <p className="mt-1 text-sm opacity-80">Welcome the guest in</p>
-                  </>
-                )}
-                {result.kind === 'denied' && (
-                  <>
-                    <p className="text-2xl font-black tracking-wide">{result.code === 'ALREADY_USED' ? 'ALREADY USED ✗' : 'DENIED ✗'}</p>
-                    <p className="mt-1.5 text-sm">{result.message}</p>
-                    {result.tag && <p className="mt-1 text-sm font-semibold">{result.tag}</p>}
-                    {result.serial && <p className="mt-1 font-mono text-sm">No. {result.serial}</p>}
-                    {result.firstUsedAt && (
-                      <p className="mt-1 text-xs opacity-80">
-                        First scanned: {new Date(result.firstUsedAt).toLocaleTimeString()} — ask an admin to allow rescan if this was a network error.
-                      </p>
-                    )}
-                  </>
-                )}
-                {result.kind === 'error' && <p className="text-lg font-bold">{result.message}</p>}
-              </div>
-              {/* Countdown line — shrinks to nothing over exactly 3s, no digits. */}
-              <div className="h-1 w-full bg-white/25">
-                <div className="scan-toast-bar h-full w-full bg-white/80" />
-              </div>
-            </div>
-          )}
-
           <div className="relative overflow-hidden rounded-2xl bg-brand-navy-900 shadow-brand" style={{ minHeight: '260px' }}>
             {/* ALWAYS mounted (never display:none/unmounted): qr-scanner
                 attaches its live decode loop directly to this <video>
@@ -622,6 +568,61 @@ export default function ScannerPage() {
               playsInline
               className="absolute inset-0 h-full w-full object-cover"
             />
+
+            {/* ---------------- scan result — popup laid directly OVER the
+                camera feed itself (owner request, 2026-09-12: was floating
+                above the camera card; now overlays it). Absolutely
+                positioned INSIDE the camera card, pinned to its top edge,
+                above the video and the scanning frame (z-30) — it never
+                shifts the page layout since it's out of flow relative to
+                this card. Auto-closes after 3s via showResult()'s timer;
+                the thin bar at the bottom is a pure CSS animation
+                (scan-toast-bar, globals.css) timed to the same 3000ms, so
+                there's a visual countdown with no numbers. Keyed by
+                resultSeq so the entrance + bar animations restart cleanly
+                even when consecutive scans produce the identical result. */}
+            {result && (
+              <div
+                key={resultSeq}
+                className={`scan-toast-in absolute inset-x-0 top-0 z-30 m-3 overflow-hidden rounded-2xl text-white shadow-brand ${
+                  result.kind === 'granted' ? 'bg-emerald-600' : result.kind === 'denied' ? 'bg-red-600' : 'bg-amber-600'
+                }`}
+              >
+                <div className="p-4 text-center">
+                  {result.kind === 'granted' && (
+                    <>
+                      <p className="text-2xl font-black tracking-wide">ACCESS GRANTED ✓</p>
+                      {result.tag && <p className="mt-1.5 text-base font-semibold">{result.tag}</p>}
+                      {result.serial && <p className="mt-1 font-mono text-sm opacity-90">No. {result.serial}</p>}
+                      {typeof result.usageCount === 'number' && result.usageLimit !== 1 && (
+                        <p className="mt-1 text-xs opacity-80">
+                          Uses: {result.usageCount}{result.usageLimit === null ? ' (unlimited)' : ` of ${result.usageLimit}`}
+                        </p>
+                      )}
+                      <p className="mt-1 text-sm opacity-80">Welcome the guest in</p>
+                    </>
+                  )}
+                  {result.kind === 'denied' && (
+                    <>
+                      <p className="text-2xl font-black tracking-wide">{result.code === 'ALREADY_USED' ? 'ALREADY USED ✗' : 'DENIED ✗'}</p>
+                      <p className="mt-1.5 text-sm">{result.message}</p>
+                      {result.tag && <p className="mt-1 text-sm font-semibold">{result.tag}</p>}
+                      {result.serial && <p className="mt-1 font-mono text-sm">No. {result.serial}</p>}
+                      {result.firstUsedAt && (
+                        <p className="mt-1 text-xs opacity-80">
+                          First scanned: {new Date(result.firstUsedAt).toLocaleTimeString()} — ask an admin to allow rescan if this was a network error.
+                        </p>
+                      )}
+                    </>
+                  )}
+                  {result.kind === 'error' && <p className="text-lg font-bold">{result.message}</p>}
+                </div>
+                {/* Countdown line — shrinks to nothing over exactly 3s, no digits. */}
+                <div className="h-1 w-full bg-white/25">
+                  <div className="scan-toast-bar h-full w-full bg-white/80" />
+                </div>
+              </div>
+            )}
 
             {!scanning && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">

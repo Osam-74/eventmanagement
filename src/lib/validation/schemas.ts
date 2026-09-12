@@ -98,6 +98,14 @@ export const generateBatchSchema = z
     eventId: z.string().min(4),
     quantity: z.number().int().min(1).max(50),
     profile: z.enum(['share', 'hq']).default('share'),
+    // Card Type (owner request, 2026-09-12): the UI-facing wrapper around
+    // the existing tag mechanism below.
+    // - 'regular' (default): general cards, standard serial numbers. Any
+    //   tag sent alongside is ignored server-side — see generate/route.ts —
+    //   so a client that fails to hide the Tag field can never smuggle one
+    //   onto a Regular batch.
+    // - 'special': requires a non-empty tag (e.g. "VIP", "FAMILY").
+    cardType: z.enum(['regular', 'special']).default('regular'),
     // Flexible card generation (owner request, 2026-09-10):
     // - tag: printed on the card INSTEAD of the serial number (e.g. "FAMILY",
     //   "VIP"). Every card still gets a real serial internally for lookup —
@@ -118,6 +126,13 @@ export const generateBatchSchema = z
         code: z.ZodIssueCode.custom,
         path: ['quantity'],
         message: 'HQ (8K) batches are capped at 20 cards per request. Run multiple batches or use the share profile.',
+      });
+    }
+    if (v.cardType === 'special' && !(v.tag && v.tag.trim())) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['tag'],
+        message: 'A tag is required for Special cards (e.g. VIP, FAMILY).',
       });
     }
   });

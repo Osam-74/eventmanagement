@@ -20,14 +20,22 @@ export async function POST(req: NextRequest) {
 
   const parsed = generateBatchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return badRequest(parsed.error.issues[0]?.message ?? 'Invalid input');
-  const { eventId, quantity, profile } = parsed.data;
+  const { eventId, quantity, profile, cardType } = parsed.data;
 
   // Flexible generation (owner request, 2026-09-10): every card in THIS batch
   // shares the same tag + usage limit. tag prints on the card INSTEAD of the
   // serial (serial is still allocated + stored for internal traceability).
   // usageLimit omitted/null = the card can be scanned an unlimited number of
   // times; a normal single-use card is just usageLimit === 1 (the default).
-  const tag = parsed.data.tag && parsed.data.tag.trim() ? parsed.data.tag.trim().toUpperCase() : null;
+  //
+  // Card Type (owner request, 2026-09-12): 'special' requires a tag (already
+  // enforced by generateBatchSchema above). 'regular' ALWAYS clears the tag
+  // server-side, even if one was sent — the Card Type selection is the
+  // single source of truth, not whatever the Tag input happened to hold.
+  const tag =
+    cardType === 'special' && parsed.data.tag && parsed.data.tag.trim()
+      ? parsed.data.tag.trim().toUpperCase()
+      : null;
   const usageLimit = parsed.data.usageLimit ?? 1;
 
   const eventRef = db().collection('events').doc(eventId);
@@ -78,12 +86,13 @@ export async function POST(req: NextRequest) {
     status: 'generating',
     requestedBy: res.admin.uid,
     outputProfile: profile,
+    cardType,
     tag,
     usageLimit,
     createdAt: FieldValue.serverTimestamp(),
     completedAt: null,
   });
-  await writeAudit('BATCH_CREATED', res.admin.uid, { batchId: batchRef.id, eventId, quantity, profile, tag, usageLimit });
+  await writeAudit('BATCH_CREATED', res.admin.uid, { batchId: batchRef.id, eventId, quantity, profile, cardType, tag, usageLimit });
 
   const items: { serialNumber: string; invitationId: string; tag: string | null }[] = [];
   let failed = 0;

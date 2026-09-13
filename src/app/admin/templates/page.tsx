@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { adminFetch, adminJson } from '@/lib/client/api';
 import { useAdmin } from '@/lib/client/useAdmin';
 
@@ -116,9 +117,20 @@ export default function TemplatesPage() {
                       {previewLoading === t.id ? 'Loading…' : 'Preview'}
                     </button>
                     {can('canManageEvents') && (
-                      <button onClick={() => remove(t)} className="rounded-md border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50">
-                        Delete
-                      </button>
+                      <>
+                        {/* Manual QR positioning (owner request, 2026-09-13):
+                            opens a live drag/arrow-key editor for this
+                            template's exact QR spot. */}
+                        <Link
+                          href={`/admin/templates/${t.id}/modify`}
+                          className="rounded-md border border-brand-ice-200 px-2 py-1 text-xs text-brand-navy-700 hover:bg-brand-ice-50"
+                        >
+                          Modify
+                        </Link>
+                        <button onClick={() => remove(t)} className="rounded-md border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50">
+                          Delete
+                        </button>
+                      </>
                     )}
                   </div>
                 </td>

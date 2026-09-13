@@ -6,6 +6,7 @@ import {
   resolveAccessLabelGeometry,
   accessLabelGeometryBelowQr,
   serialGeometryBelowQr,
+  resolveQrGeometry,
   QR_BOX_GOLD,
   REFERENCE_CANVAS,
   REFERENCE_QR_BOX,
@@ -245,5 +246,42 @@ describe('serial format (hyphenless — code and number together)', () => {
     expect(candidates).toContain('IS-2600201');
     // Unambiguous shape (code is all letters) still returns exactly one.
     expect(hyphenateSerialCandidates('ISWED00042')).toEqual(['ISWED-00042']);
+  });
+});
+
+describe('resolveQrGeometry — manual position override (owner request, 2026-09-13)', () => {
+  const canvasWidth = 1070;
+  const canvasHeight = 1470;
+
+  it('with no override, behaves exactly like before this parameter existed', () => {
+    const withoutArg = resolveQrGeometry(canvasWidth, canvasHeight);
+    const withUndefined = resolveQrGeometry(canvasWidth, canvasHeight, undefined);
+    const withNull = resolveQrGeometry(canvasWidth, canvasHeight, null);
+    expect(withUndefined).toEqual(withoutArg);
+    expect(withNull).toEqual(withoutArg);
+  });
+
+  it('a valid override replaces x/y but keeps the same size and ratios', () => {
+    const base = resolveQrGeometry(canvasWidth, canvasHeight);
+    const overridden = resolveQrGeometry(canvasWidth, canvasHeight, { x: 100, y: 200 });
+    expect(overridden.x).toBe(100);
+    expect(overridden.y).toBe(200);
+    expect(overridden.size).toBe(base.size);
+    expect(overridden.xRatio).toBe(base.xRatio);
+  });
+
+  it('a malformed override (missing/NaN fields) falls back to the default, never throws', () => {
+    const base = resolveQrGeometry(canvasWidth, canvasHeight);
+    expect(resolveQrGeometry(canvasWidth, canvasHeight, {})).toEqual(base);
+    expect(resolveQrGeometry(canvasWidth, canvasHeight, { x: Number.NaN, y: 5 })).toEqual(base);
+  });
+
+  it('moving the QR moves the label + serial group with it (single anchor point)', () => {
+    const defaultQr = resolveQrGeometry(canvasWidth, canvasHeight);
+    const movedQr = resolveQrGeometry(canvasWidth, canvasHeight, { x: defaultQr.x + 50, y: defaultQr.y + 50 });
+    const defaultSerial = serialGeometryBelowQr(defaultQr, canvasWidth, canvasHeight);
+    const movedSerial = serialGeometryBelowQr(movedQr, canvasWidth, canvasHeight);
+    expect(movedSerial.x).toBe(defaultSerial.x + 50);
+    expect(movedSerial.y).toBe(defaultSerial.y + 50);
   });
 });

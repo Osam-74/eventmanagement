@@ -39,7 +39,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
   const canvasWidth = template.canvasWidth as number;
   const canvasHeight = template.canvasHeight as number;
-  const qrGeometry = resolveQrGeometry(canvasWidth, canvasHeight);
+  const qrGeometry = resolveQrGeometry(canvasWidth, canvasHeight, template.qrOverride as never);
   const serialGeometry = resolveSerialGeometry({ canvasWidth, canvasHeight, qr: qrGeometry, serial: template.serial as never });
   const accessLabelGeometry = resolveAccessLabelGeometry({ canvasWidth, canvasHeight, qr: qrGeometry });
 

@@ -217,7 +217,7 @@ export async function regenerateInvitationImage(
   // BUG fix (2026-09-11): recompute from the current ratios, never read the
   // position frozen on the template document at upload time — see
   // resolveQrGeometry() in geometry.ts.
-  const qrGeometry = resolveQrGeometry(template.canvasWidth as number, template.canvasHeight as number);
+  const qrGeometry = resolveQrGeometry(template.canvasWidth as number, template.canvasHeight as number, template.qrOverride as never);
   const serialGeometry = resolveSerialGeometry({
     canvasWidth: template.canvasWidth as number,
     canvasHeight: template.canvasHeight as number,

@@ -171,11 +171,27 @@ export function serialGeometryBelowQr(
  * use this function instead of `template.qr`, matching the same
  * always-current, no-migration-needed pattern as everything else.
  */
-export function resolveQrGeometry(canvasWidth: number, canvasHeight: number): TemplateGeometry['qr'] {
+export function resolveQrGeometry(
+  canvasWidth: number,
+  canvasHeight: number,
+  // Manual position override (owner request, 2026-09-13): an admin can
+  // drag the QR to any spot on a per-template basis via the Modify editor.
+  // This is deliberately an EXPLICIT, separately-stored field
+  // (template.qrOverride) set only through that editor's Save action —
+  // never the old `template.qr` snapshot the 2026-09-11 bug fix above
+  // stopped trusting. Size/ratios still always come from the current
+  // approved ratio, exactly like the no-override path; only x/y move.
+  // Absent/null/malformed override -> identical output to before this
+  // parameter existed, so every template that has never been manually
+  // repositioned is completely unaffected.
+  override?: { x?: number | null; y?: number | null } | null
+): TemplateGeometry['qr'] {
+  const size = Math.round(QR_W_RATIO * canvasWidth);
+  const hasOverride = override != null && Number.isFinite(override.x) && Number.isFinite(override.y);
   return {
-    x: Math.round(QR_X_RATIO * canvasWidth),
-    y: Math.round(QR_Y_RATIO * canvasHeight),
-    size: Math.round(QR_W_RATIO * canvasWidth),
+    x: hasOverride ? Math.round(override!.x as number) : Math.round(QR_X_RATIO * canvasWidth),
+    y: hasOverride ? Math.round(override!.y as number) : Math.round(QR_Y_RATIO * canvasHeight),
+    size,
     xRatio: QR_X_RATIO,
     yRatio: QR_Y_RATIO,
     widthRatio: QR_W_RATIO,

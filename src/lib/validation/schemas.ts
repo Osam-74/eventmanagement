@@ -137,6 +137,20 @@ export const generateBatchSchema = z
     }
   });
 
+// Manual QR position override (owner request, 2026-09-13): {x:null,y:null}
+// clears the override back to the default ratio-based position; otherwise
+// both must be non-negative integers within the canvas — the route clamps
+// to the actual valid range since that depends on canvasWidth/Height and
+// the QR's fixed size, which zod alone can't express.
+export const templateGeometryOverrideSchema = z
+  .object({
+    x: z.number().int().min(0).nullable(),
+    y: z.number().int().min(0).nullable(),
+  })
+  .refine((v) => (v.x === null) === (v.y === null), {
+    message: 'x and y must both be a position, or both be null to reset to default',
+  });
+
 export const revokeInvitationSchema = z.object({
   reason: z.string().max(300).default(''),
 });

@@ -47,6 +47,9 @@ export default function InvitationsPage() {
   const [rescanFor, setRescanFor] = useState<Invitation | null>(null);
   const [rescanReason, setRescanReason] = useState('');
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [deleteTargets, setDeleteTargets] = useState<Invitation[] | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(
     async (offset = 0) => {
@@ -61,6 +64,7 @@ export default function InvitationsPage() {
         setItems(r.items);
         setTotal(r.total);
         setSkip(offset);
+        setSelected(new Set());
       }
     },
     [eventId, q, status]
@@ -117,9 +121,50 @@ export default function InvitationsPage() {
     }
   }
 
-  async function downloadCard(inv: Invitation) {
+  async function viewCard(inv: Invitation) {
     const r = await adminJson<{ ok: boolean; url?: string }>(`/api/admin/invitations/${inv.id}/image`);
     if (r?.url) window.open(r.url, '_blank');
+  }
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelected((prev) => (prev.size === items.length ? new Set() : new Set(items.map((i) => i.id))));
+  }
+
+  async function confirmDelete() {
+    if (!deleteTargets || deleteTargets.length === 0) return;
+    setDeleting(true);
+    const r = await adminJson<{ ok: boolean; deleted?: number; skipped?: number; message?: string }>(
+      '/api/admin/invitations',
+      {
+        method: 'DELETE',
+        body: JSON.stringify({
+          invitationIds: deleteTargets.map((i) => i.id),
+          reason: deleteTargets.length > 1 ? 'Batch deleted from admin console' : 'Deleted from admin console',
+        }),
+      }
+    ).catch(() => null);
+    setDeleting(false);
+    setDeleteTargets(null);
+    if (r?.ok) {
+      setMsg(
+        deleteTargets.length > 1
+          ? `Deleted ${r.deleted ?? deleteTargets.length} invitation(s) and their stored card images.`
+          : `Deleted ${deleteTargets[0].serialNumber} and its stored card image.`
+      );
+      setSelected(new Set());
+      load(skip);
+    } else {
+      setMsg(r?.message ?? 'Could not delete the selected invitation(s).');
+    }
   }
 
   if (!eventId) return <p className="text-brand-navy-700/60">Select an event first.</p>;
@@ -156,11 +201,33 @@ export default function InvitationsPage() {
         {msg && <p className="mt-2 text-sm text-brand-navy-700">{msg}</p>}
       </div>
 
+      {selected.size > 0 && can('canManageInvites') && (
+        <div className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <p className="text-sm font-medium text-red-800">{selected.size} invitation(s) selected</p>
+          <button
+            onClick={() => setDeleteTargets(items.filter((i) => selected.has(i.id)))}
+            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+          >
+            Delete selected
+          </button>
+        </div>
+      )}
+
       <div className="overflow-hidden rounded-xl border border-brand-ice-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] text-sm">
+        <table className="w-full min-w-[760px] text-sm">
           <thead>
             <tr className="border-b border-brand-ice-200 bg-brand-ice-50 text-left text-xs font-semibold uppercase tracking-wide text-brand-navy-700/50">
+              {can('canManageInvites') && (
+                <th className="w-10 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={items.length > 0 && selected.size === items.length}
+                    onChange={toggleSelectAll}
+                    aria-label="Select all invitations on this page"
+                  />
+                </th>
+              )}
               <th className="px-4 py-3">Serial / Tag</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Uses</th>
@@ -173,6 +240,16 @@ export default function InvitationsPage() {
             {items.map((inv) => (
               <Fragment key={inv.id}>
                 <tr className="border-t border-brand-ice-100 transition hover:bg-brand-ice-50/60">
+                  {can('canManageInvites') && (
+                    <td className="px-4 py-2.5">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(inv.id)}
+                        onChange={() => toggleSelect(inv.id)}
+                        aria-label={`Select ${inv.serialNumber}`}
+                      />
+                    </td>
+                  )}
                   <td className="px-4 py-2.5">
                     {inv.tag && (
                       <span className="mr-1.5 rounded-full bg-brand-blue-500/10 px-2 py-0.5 text-xs font-semibold text-brand-blue-700">{inv.tag}</span>
@@ -215,15 +292,20 @@ export default function InvitationsPage() {
                           Allow rescan
                         </button>
                       )}
-                      <button onClick={() => downloadCard(inv)} className="rounded-md border border-brand-ice-200 px-2 py-1 text-xs text-brand-navy-700 hover:bg-brand-ice-50">
-                        Card
+                      <button onClick={() => viewCard(inv)} className="rounded-md border border-brand-ice-200 px-2 py-1 text-xs text-brand-navy-700 hover:bg-brand-ice-50">
+                        View
                       </button>
+                      {can('canManageInvites') && (
+                        <button onClick={() => setDeleteTargets([inv])} className="rounded-md border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50">
+                          Delete
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
                 {expanded === inv.id && (
                   <tr className="bg-brand-ice-50/70">
-                    <td colSpan={6} className="px-4 py-3 text-xs text-brand-navy-700/80">
+                    <td colSpan={can('canManageInvites') ? 7 : 6} className="px-4 py-3 text-xs text-brand-navy-700/80">
                       <p>Generated: {fmt(inv.generatedAt)} · Profile: {inv.outputProfile}</p>
                       {inv.status === 'revoked' && <p className="text-red-600">Revoked: {fmt(inv.revokedAt)} — {inv.revocationReason}</p>}
                       {inv.supersededByInvitationId && (
@@ -248,7 +330,7 @@ export default function InvitationsPage() {
               </Fragment>
             ))}
             {items.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-6 text-center text-brand-navy-700/50">No invitations found for this search.</td></tr>
+              <tr><td colSpan={can('canManageInvites') ? 7 : 6} className="px-4 py-6 text-center text-brand-navy-700/50">No invitations found for this search.</td></tr>
             )}
           </tbody>
         </table>
@@ -298,6 +380,43 @@ export default function InvitationsPage() {
                 className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-50"
               >
                 Release for rescan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteTargets && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-navy-950/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-brand">
+            <h3 className="text-lg font-semibold text-brand-navy-900">
+              Delete {deleteTargets.length === 1 ? deleteTargets[0].serialNumber : `${deleteTargets.length} invitations`}?
+            </h3>
+            <p className="mt-2 text-sm text-brand-navy-700/80">
+              This also permanently deletes the rendered card image{deleteTargets.length > 1 ? 's' : ''} from Cloud
+              Storage — not just the record here. There is no undo.
+            </p>
+            {deleteTargets.length > 1 && (
+              <ul className="mt-3 max-h-40 space-y-1 overflow-y-auto rounded-lg border border-brand-ice-200 bg-brand-ice-50 p-2 text-xs text-brand-navy-700">
+                {deleteTargets.map((t) => (
+                  <li key={t.id} className="font-mono">{t.serialNumber}</li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setDeleteTargets(null)}
+                disabled={deleting}
+                className="rounded-lg border border-brand-ice-200 px-4 py-2 text-sm text-brand-navy-700 hover:bg-brand-ice-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={deleting}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleting ? 'Deleting…' : 'Proceed — delete from website and Storage'}
               </button>
             </div>
           </div>

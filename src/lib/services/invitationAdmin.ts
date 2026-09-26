@@ -320,6 +320,87 @@ export async function regenerateInvitationImage(
   return { ok: true, serialNumber: serial, newInvitationId: newRef.id, imageUrl };
 }
 
+/**
+ * Deletes one or more invitations outright: removes the Firestore record
+ * AND its rendered card image from Cloud Storage (the admin console asks
+ * the operator to confirm this Storage cascade before calling this — see
+ * the invitations page). Non-transactional by design: unlike revoke/rescan
+ * there is no in-progress state to protect against a racing scan — once a
+ * doc is gone, a concurrent scan simply 404s, which is the correct outcome
+ * for something the admin explicitly asked to erase.
+ *
+ * Each event's totalGenerated/totalUsed/totalRevoked counters are
+ * decremented to match, so the dashboard's `unused = generated - used -
+ * revoked` math stays correct after the delete.
+ */
+export async function deleteInvitations(
+  firestore: Firestore,
+  bucket: Bucket,
+  input: { invitationIds: string[]; reason: string; admin: AdminActor }
+): Promise<ServiceResult<{ deleted: number; skipped: number }>> {
+  const { invitationIds, reason, admin } = input;
+  const deletedLog: { id: string; serial: string | null; status: string | null }[] = [];
+  const eventDeltas = new Map<string, { generated: number; used: number; revoked: number }>();
+  let skipped = 0;
+
+  for (const id of invitationIds) {
+    const ref = firestore.collection('invitations').doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      skipped += 1;
+      continue;
+    }
+    const data = snap.data()!;
+    const eventId = data.eventId as string | undefined;
+    const status = (data.status as string | undefined) ?? null;
+    const storagePath = (data.imageStoragePath as string | undefined) ?? null;
+
+    if (storagePath) {
+      await bucket.file(storagePath).delete().catch((e) => {
+        // Non-fatal, same rationale as event-level Storage cleanup: an
+        // already-gone or unreadable object must never block removing the
+        // Firestore record the admin explicitly asked to delete.
+        console.error('invitation storage cleanup failed', storagePath, (e as Error).message);
+      });
+    }
+    await ref.delete();
+
+    if (eventId) {
+      const delta = eventDeltas.get(eventId) ?? { generated: 0, used: 0, revoked: 0 };
+      delta.generated += 1;
+      if (status === 'used') delta.used += 1;
+      if (status === 'revoked') delta.revoked += 1;
+      eventDeltas.set(eventId, delta);
+    }
+    deletedLog.push({ id, serial: (data.serialNumber as string | undefined) ?? null, status });
+  }
+
+  if (deletedLog.length === 0) {
+    return { ok: false, code: 'NOT_FOUND', message: 'None of the selected invitations were found.' };
+  }
+
+  if (eventDeltas.size > 0) {
+    const batch = firestore.batch();
+    for (const [eventId, delta] of eventDeltas) {
+      const update: Record<string, unknown> = { totalGenerated: FieldValue.increment(-delta.generated) };
+      if (delta.used) update.totalUsed = FieldValue.increment(-delta.used);
+      if (delta.revoked) update.totalRevoked = FieldValue.increment(-delta.revoked);
+      batch.update(firestore.collection('events').doc(eventId), update);
+    }
+    await batch.commit();
+  }
+
+  await firestore.collection('auditLogs').add({
+    action: 'INVITATION_DELETED',
+    actor: admin.uid,
+    actorType: 'admin',
+    detail: { reason, count: deletedLog.length, skipped, invitations: deletedLog },
+    at: FieldValue.serverTimestamp(),
+  });
+
+  return { ok: true, deleted: deletedLog.length, skipped };
+}
+
 class RevocationError extends Error {
   constructor(public code: 'NOT_FOUND' | 'NOT_UNUSED' | 'NOT_USED' | 'ERROR', message: string) {
     super(message);

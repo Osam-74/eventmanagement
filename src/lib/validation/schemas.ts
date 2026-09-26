@@ -155,6 +155,11 @@ export const revokeInvitationSchema = z.object({
   reason: z.string().max(300).default(''),
 });
 
+export const deleteInvitationsSchema = z.object({
+  invitationIds: z.array(z.string().min(1)).min(1).max(200),
+  reason: z.string().max(300).default('Deleted from admin console'),
+});
+
 export const regenerateInvitationSchema = z.object({
   reason: z.string().max(300).default('Regenerated — rendering fix'),
 });

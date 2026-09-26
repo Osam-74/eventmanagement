@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/firebase/admin';
+import { bucket, db } from '@/lib/firebase/admin';
 import { Timestamp } from 'firebase-admin/firestore';
 
 const iso = (v: unknown): string | null => (v instanceof Timestamp ? v.toDate().toISOString() : null);
 import { digestToken } from '@/lib/qr/digest';
 import { normalizeSerial, hyphenateSerialCandidates } from '@/lib/invitation/serial';
 import { badRequest, requirePermission } from '@/lib/api/helpers';
+import { deleteInvitationsSchema } from '@/lib/validation/schemas';
+import { deleteInvitations } from '@/lib/services/invitationAdmin';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -120,4 +122,26 @@ export async function GET(req: NextRequest) {
 
   const countSnap = await query.count().get();
   return NextResponse.json({ ok: true, items, total: countSnap.data().count });
+}
+
+/**
+ * Batch delete: removes each invitation's Firestore record AND its
+ * rendered card image from Storage. The admin console's confirmation
+ * prompt (not this endpoint) is where the operator is told Storage will
+ * be wiped too — by the time this is called, that's already agreed to.
+ */
+export async function DELETE(req: NextRequest) {
+  const res = await requirePermission(req, 'canManageInvites');
+  if ('error' in res) return res.error;
+
+  const parsed = deleteInvitationsSchema.safeParse(await req.json().catch(() => ({})));
+  if (!parsed.success) return badRequest(parsed.error.issues[0]?.message ?? 'Invalid input');
+
+  const result = await deleteInvitations(db(), bucket(), {
+    invitationIds: parsed.data.invitationIds,
+    reason: parsed.data.reason,
+    admin: { uid: res.admin.uid, displayName: res.admin.displayName, email: res.admin.email },
+  });
+  if (!result.ok) return NextResponse.json({ ok: false, message: result.message }, { status: 400 });
+  return NextResponse.json({ ok: true, deleted: result.deleted, skipped: result.skipped });
 }

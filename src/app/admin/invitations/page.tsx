@@ -34,6 +34,70 @@ const STATUS_STYLE: Record<string, string> = {
   revoked: 'bg-red-100 text-red-700',
 };
 
+// Icon-only action buttons (see the Actions column below) — each pairs a
+// small inline SVG with a title/aria-label so the action stays labeled for
+// tooltips and screen readers even without visible text.
+const ICON_BASE = 'h-4 w-4';
+function HistoryIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON_BASE}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 3" />
+    </svg>
+  );
+}
+function RevokeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON_BASE}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M5.5 5.5l13 13" />
+    </svg>
+  );
+}
+function RegenerateIcon({ spinning = false }: { spinning?: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`${ICON_BASE} ${spinning ? 'animate-spin' : ''}`}
+    >
+      <path d="M23 4v6h-6" />
+      <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+    </svg>
+  );
+}
+function RescanIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON_BASE}>
+      <rect x="3" y="11" width="18" height="11" rx="2" />
+      <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+    </svg>
+  );
+}
+function ViewIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON_BASE}>
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+function DeleteIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON_BASE}>
+      <path d="M3 6h18" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+    </svg>
+  );
+}
+
 export default function InvitationsPage() {
   const { can } = useAdmin();
   const { eventId } = useSelectedEvent();
@@ -268,36 +332,63 @@ export default function InvitationsPage() {
                     <div className="flex justify-end gap-1.5">
                       <button
                         onClick={() => setExpanded(expanded === inv.id ? null : inv.id)}
-                        className="rounded-md border border-brand-ice-200 px-2 py-1 text-xs text-brand-navy-700 hover:bg-brand-ice-50"
+                        title="History"
+                        aria-label="View history"
+                        className="rounded-md border border-brand-ice-200 p-1.5 text-brand-navy-700 hover:bg-brand-ice-50"
                       >
-                        History
+                        <HistoryIcon />
                       </button>
                       {inv.status === 'unused' && can('canManageInvites') && (
-                        <button onClick={() => revoke(inv)} className="rounded-md border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50">
-                          Revoke
+                        <button
+                          onClick={() => revoke(inv)}
+                          title="Revoke"
+                          aria-label="Revoke invitation"
+                          className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
+                        >
+                          <RevokeIcon />
                         </button>
                       )}
                       {inv.status === 'unused' && can('canGenerateInvites') && (
                         <button
                           onClick={() => regenerate(inv)}
                           disabled={regeneratingId === inv.id}
-                          title="Fixes a broken render (e.g. missing serial) by issuing a fresh QR + image. Only for cards not yet handed to a guest."
-                          className="rounded-md border border-brand-ice-200 px-2 py-1 text-xs text-brand-navy-700 hover:bg-brand-ice-50 disabled:opacity-50"
+                          title={
+                            regeneratingId === inv.id
+                              ? 'Regenerating…'
+                              : 'Regenerate image — fixes a broken render (e.g. missing serial) by issuing a fresh QR + image. Only for cards not yet handed to a guest.'
+                          }
+                          aria-label="Regenerate image"
+                          className="rounded-md border border-brand-ice-200 p-1.5 text-brand-navy-700 hover:bg-brand-ice-50 disabled:opacity-50"
                         >
-                          {regeneratingId === inv.id ? 'Regenerating…' : 'Regenerate image'}
+                          <RegenerateIcon spinning={regeneratingId === inv.id} />
                         </button>
                       )}
                       {inv.status === 'used' && can('canManageInvites') && (
-                        <button onClick={() => setRescanFor(inv)} className="rounded-md bg-amber-500 px-2 py-1 text-xs font-medium text-white hover:bg-amber-600">
-                          Allow rescan
+                        <button
+                          onClick={() => setRescanFor(inv)}
+                          title="Allow rescan"
+                          aria-label="Allow rescan"
+                          className="rounded-md bg-amber-500 p-1.5 text-white hover:bg-amber-600"
+                        >
+                          <RescanIcon />
                         </button>
                       )}
-                      <button onClick={() => viewCard(inv)} className="rounded-md border border-brand-ice-200 px-2 py-1 text-xs text-brand-navy-700 hover:bg-brand-ice-50">
-                        View
+                      <button
+                        onClick={() => viewCard(inv)}
+                        title="View card"
+                        aria-label="View card"
+                        className="rounded-md border border-brand-ice-200 p-1.5 text-brand-navy-700 hover:bg-brand-ice-50"
+                      >
+                        <ViewIcon />
                       </button>
                       {can('canManageInvites') && (
-                        <button onClick={() => setDeleteTargets([inv])} className="rounded-md border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50">
-                          Delete
+                        <button
+                          onClick={() => setDeleteTargets([inv])}
+                          title="Delete"
+                          aria-label="Delete invitation"
+                          className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
+                        >
+                          <DeleteIcon />
                         </button>
                       )}
                     </div>

@@ -67,6 +67,31 @@ export function fitSerialFontSize(
   return { fontSize: size, letterSpacing, textW };
 }
 
+/**
+ * Geometry of the white plate behind the serial / tag. Pure and exported so
+ * the sizing rules are unit-testable without rendering an image.
+ * - width follows the measured text (+ side padding), so it always covers it
+ * - height is a fixed multiple of the font size
+ * - corner radius is 15% of the plate HEIGHT, applied to all four corners
+ */
+export const SERIAL_PLATE_RADIUS_RATIO = 0.15;
+export function serialPlateRect(
+  cx: number,
+  baselineY: number,
+  fontSize: number,
+  textW: number
+): { x: number; y: number; w: number; h: number; rx: number } {
+  const w = Math.round(textW + fontSize * 1.6);
+  const h = Math.round(fontSize * 1.7);
+  return {
+    x: Math.round(cx - w / 2),
+    y: Math.round(baselineY - fontSize * 1.18),
+    w,
+    h,
+    rx: Math.round(h * SERIAL_PLATE_RADIUS_RATIO),
+  };
+}
+
 function escapeXml(s: string): string {
   return s.replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' })[c]!);
 }
@@ -185,13 +210,13 @@ export async function renderInvitationImage(opts: {
     let content = serialToSvgPaths(serial, sx, sy, fontSize, letterSpacing, color);
     if (geometry.serial.plate) {
       // White rounded plate guarantees the serial is legible on ANY
-      // artwork background (gold frame, dark motif, photo).
-      const plateW = Math.round(textW + fontSize * 1.6);
-      const plateH = Math.round(fontSize * 1.7);
-      const plateX = Math.round(sx - plateW / 2);
-      const plateY = Math.round(sy - fontSize * 1.18);
+      // artwork background (gold frame, dark motif, photo). Sized from the
+      // MEASURED text width, so a short serial and a long custom tag each
+      // get a snug, fully-covering background. Corner radius is 15% of the
+      // plate height (owner request 2026-09-28) on all four corners.
+      const { x, y, w, h, rx } = serialPlateRect(sx, sy, fontSize, textW);
       content =
-        `<rect x="${plateX}" y="${plateY}" width="${plateW}" height="${plateH}" rx="${Math.round(plateH / 4)}" fill="#ffffff"/>` +
+        `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" ry="${rx}" fill="#ffffff"/>` +
         content;
     }
     overlays.push({

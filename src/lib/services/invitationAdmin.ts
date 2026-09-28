@@ -11,7 +11,7 @@ type Bucket = ReturnType<typeof bucketFn>;
 export type AdminActor = { uid: string; displayName: string; email: string };
 export type ServiceResult<T = Record<string, unknown>> =
   | ({ ok: true } & T)
-  | { ok: false; code: 'NOT_FOUND' | 'NOT_UNUSED' | 'NOT_USED' | 'ERROR'; message: string };
+  | { ok: false; code: 'NOT_FOUND' | 'NOT_UNUSED' | 'NOT_USED' | 'BELOW_USED' | 'REVOKED' | 'ERROR'; message: string };
 
 /**
  * Revocation (fire-and-forget negative list): only an UNUSED invitation can
@@ -321,6 +321,127 @@ export async function regenerateInvitationImage(
 }
 
 /**
+ * Pure decision for a scan-allowance edit — exported so every rule is
+ * unit-testable without Firestore. Given the card's current state and the
+ * requested new limit, returns either the next status + how the event's
+ * `totalUsed` counter must move, or the reason the edit is refused.
+ *
+ * Rules (they exist so an edit can never cause a scan problem):
+ *  - a revoked card is never edited (it is dead on purpose)
+ *  - the new limit can never be BELOW the uses already consumed — that
+ *    would retroactively make past, valid admissions "over the limit"
+ *  - status is always re-derived from the numbers, never trusted:
+ *      used >= limit  → 'used'   (locked, exactly like a naturally
+ *                                 exhausted card)
+ *      otherwise      → 'unused' (scannable)
+ *    so raising the limit on an exhausted card REOPENS it, and lowering it
+ *    to exactly the uses consumed LOCKS it.
+ *  - `totalUsed` counts exhausted CARDS (see scan.ts), so it moves by +1
+ *    when an edit exhausts a card, -1 when it reopens one, 0 otherwise.
+ */
+export type UsageLimitDecision =
+  | { ok: true; nextStatus: 'used' | 'unused'; totalUsedDelta: -1 | 0 | 1; changed: boolean }
+  | { ok: false; code: 'REVOKED' | 'BELOW_USED'; message: string };
+
+export function decideUsageLimitChange(
+  current: { status: string; usageCount: number; usageLimit: number | null },
+  newLimit: number | null
+): UsageLimitDecision {
+  if (current.status === 'revoked') {
+    return { ok: false, code: 'REVOKED', message: 'A revoked card cannot be edited.' };
+  }
+  const used = current.usageCount;
+  if (newLimit !== null && newLimit < used) {
+    return {
+      ok: false,
+      code: 'BELOW_USED',
+      message: `This card has already been scanned ${used} time${used === 1 ? '' : 's'}, so the limit cannot be lower than ${used}.`,
+    };
+  }
+  const wasExhausted = current.status === 'used';
+  const willBeExhausted = newLimit !== null && used >= newLimit;
+  const nextStatus = willBeExhausted ? 'used' : 'unused';
+  const totalUsedDelta = wasExhausted === willBeExhausted ? 0 : willBeExhausted ? 1 : -1;
+  return { ok: true, nextStatus, totalUsedDelta, changed: newLimit !== current.usageLimit };
+}
+
+/**
+ * Edit how many times an existing card may be scanned — increase, reduce, or
+ * switch to unlimited — WITHOUT touching the card itself. The QR token, its
+ * digest (the document id) and the printed image are all unchanged, so a
+ * card that is already printed or shared keeps working and needs no
+ * reprint. Only the allowance stored server-side changes.
+ *
+ * Runs in ONE transaction that reads the live card first, so it is
+ * serialized against gate scans: a scan racing this edit either commits
+ * before it (and the edit is validated against the true post-scan count)
+ * or after it (and sees the new limit). No lost update, no double count.
+ * Reads happen before writes (Firestore requirement).
+ */
+export async function updateInvitationUsageLimit(
+  firestore: Firestore,
+  input: { invitationId: string; usageLimit: number | null; reason: string; admin: AdminActor }
+): Promise<ServiceResult<{ serialNumber: string | null; usageCount: number; usageLimit: number | null; status: 'used' | 'unused'; changed: boolean }>> {
+  const { invitationId, usageLimit: newLimit, reason, admin } = input;
+  const invitationRef = firestore.collection('invitations').doc(invitationId);
+  let audit: { serial: string | null; previous: number | null; usageCount: number; status: 'used' | 'unused'; changed: boolean } | null = null;
+
+  try {
+    await firestore.runTransaction(async (tx) => {
+      // ---- reads ----
+      const snap = await tx.get(invitationRef);
+      if (!snap.exists) throw new RevocationError('NOT_FOUND', 'Invitation not found');
+      const data = snap.data()!;
+      const eventRef = firestore.collection('events').doc(data.eventId as string);
+      await tx.get(eventRef); // read before its counter write below
+
+      // Legacy cards carry no usageLimit / usageCount field: treat exactly
+      // as scan.ts does — a 1-use card, with usageCount inferred from status.
+      const previous = data.usageLimit === undefined ? 1 : (data.usageLimit as number | null);
+      const usageCount =
+        (data.usageCount as number | undefined) ?? (data.status === 'used' ? 1 : 0);
+
+      const decision = decideUsageLimitChange(
+        { status: data.status as string, usageCount, usageLimit: previous },
+        newLimit
+      );
+      if (!decision.ok) throw new RevocationError(decision.code, decision.message);
+
+      audit = { serial: data.serialNumber as string, previous, usageCount, status: decision.nextStatus, changed: decision.changed };
+      if (!decision.changed) return; // nothing to write — idempotent no-op
+
+      // ---- writes ----
+      tx.update(invitationRef, {
+        usageLimit: newLimit,
+        // Persist the count explicitly so a legacy card (no usageCount) is
+        // migrated to the modern shape the moment it is edited.
+        usageCount,
+        status: decision.nextStatus,
+      });
+      if (decision.totalUsedDelta !== 0) {
+        tx.update(eventRef, { totalUsed: FieldValue.increment(decision.totalUsedDelta) });
+      }
+    });
+  } catch (e) {
+    if (e instanceof RevocationError) return { ok: false, code: e.code, message: e.message };
+    console.error('update usage limit error', (e as Error).message);
+    return { ok: false, code: 'ERROR', message: 'Could not update the scan limit.' };
+  }
+
+  const a = audit!;
+  if (a.changed) {
+    await firestore.collection('auditLogs').add({
+      action: 'INVITATION_USAGE_LIMIT_CHANGED',
+      actor: admin.uid,
+      actorType: 'admin',
+      detail: { invitationId, serialNumber: a.serial, from: a.previous, to: newLimit, usageCount: a.usageCount, reason },
+      at: FieldValue.serverTimestamp(),
+    });
+  }
+  return { ok: true, serialNumber: a.serial, usageCount: a.usageCount, usageLimit: newLimit, status: a.status, changed: a.changed };
+}
+
+/**
  * Deletes one or more invitations outright: removes the Firestore record
  * AND its rendered card image from Cloud Storage (the admin console asks
  * the operator to confirm this Storage cascade before calling this — see
@@ -402,7 +523,7 @@ export async function deleteInvitations(
 }
 
 class RevocationError extends Error {
-  constructor(public code: 'NOT_FOUND' | 'NOT_UNUSED' | 'NOT_USED' | 'ERROR', message: string) {
+  constructor(public code: 'NOT_FOUND' | 'NOT_UNUSED' | 'NOT_USED' | 'BELOW_USED' | 'REVOKED' | 'ERROR', message: string) {
     super(message);
   }
 }

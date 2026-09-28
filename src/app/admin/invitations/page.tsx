@@ -78,6 +78,22 @@ function RescanIcon() {
     </svg>
   );
 }
+function ScansIcon() {
+  // "Sliders" glyph — adjust the scan allowance.
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON_BASE}>
+      <path d="M4 21v-7" />
+      <path d="M4 10V3" />
+      <path d="M12 21v-9" />
+      <path d="M12 8V3" />
+      <path d="M20 21v-5" />
+      <path d="M20 12V3" />
+      <path d="M1 14h6" />
+      <path d="M9 8h6" />
+      <path d="M17 16h6" />
+    </svg>
+  );
+}
 function ViewIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON_BASE}>
@@ -111,6 +127,13 @@ export default function InvitationsPage() {
   const [rescanFor, setRescanFor] = useState<Invitation | null>(null);
   const [rescanReason, setRescanReason] = useState('');
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
+  // Edit-scans dialog: `limitFor` is the card being edited; `limitUnlimited`
+  // / `limitValue` are the draft (value kept as a string so the field can be
+  // cleared while typing); `limitSaving` blocks double submits.
+  const [limitFor, setLimitFor] = useState<Invitation | null>(null);
+  const [limitUnlimited, setLimitUnlimited] = useState(false);
+  const [limitValue, setLimitValue] = useState('1');
+  const [limitSaving, setLimitSaving] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleteTargets, setDeleteTargets] = useState<Invitation[] | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -182,6 +205,65 @@ export default function InvitationsPage() {
     } else {
       setMsg(r?.message ?? 'Could not release for rescan.');
       setRescanFor(null);
+    }
+  }
+
+  function openLimitEditor(inv: Invitation) {
+    setLimitFor(inv);
+    setLimitUnlimited(inv.usageLimit === null);
+    setLimitValue(String(inv.usageLimit ?? Math.max(inv.usageCount, 1)));
+  }
+
+  // What the draft would do — drives the live preview AND gates Save, so an
+  // invalid edit (below the uses already consumed, empty, out of range) can
+  // never even be submitted. The server re-validates all of it regardless.
+  function limitDraft(inv: Invitation): {
+    valid: boolean;
+    next: number | null;
+    note: string;
+    tone: 'info' | 'good' | 'warn' | 'bad';
+  } {
+    if (limitUnlimited) {
+      return { valid: inv.usageLimit !== null, next: null, tone: 'good',
+        note: inv.usageLimit === null ? 'Already unlimited.' : 'Unlimited: this card will keep admitting with no cap.' };
+    }
+    const n = Number(limitValue);
+    if (!limitValue.trim() || !Number.isInteger(n) || n < 1 || n > 9999) {
+      return { valid: false, next: null, tone: 'bad', note: 'Enter a whole number from 1 to 9999.' };
+    }
+    if (n < inv.usageCount) {
+      return { valid: false, next: n, tone: 'bad',
+        note: `Already scanned ${inv.usageCount} time${inv.usageCount === 1 ? '' : 's'} — the limit can't be lower than ${inv.usageCount}.` };
+    }
+    if (n === inv.usageLimit) return { valid: false, next: n, tone: 'info', note: 'No change from the current limit.' };
+    if (n === inv.usageCount) {
+      return { valid: true, next: n, tone: 'warn', note: `This will lock the card now: all ${n} scan${n === 1 ? ' is' : 's are'} already used.` };
+    }
+    const left = n - inv.usageCount;
+    const reopen = inv.status === 'used';
+    return { valid: true, next: n, tone: 'good',
+      note: `${reopen ? 'Reopens this card. ' : ''}${left} scan${left === 1 ? '' : 's'} will remain (${inv.usageCount} of ${n} used).` };
+  }
+
+  async function saveLimit() {
+    if (!limitFor) return;
+    const d = limitDraft(limitFor);
+    if (!d.valid) return;
+    setLimitSaving(true);
+    const r = await adminJson<{ ok: boolean; message?: string; usageLimit?: number | null }>(
+      `/api/admin/invitations/${limitFor.id}/usage-limit`,
+      { method: 'POST', body: JSON.stringify({ usageLimit: d.next, reason: 'Scan limit edited from admin console' }) }
+    ).catch(() => null);
+    setLimitSaving(false);
+    if (r?.ok) {
+      setMsg(
+        `${limitFor.tag ?? limitFor.serialNumber} can now be scanned ${d.next === null ? 'an unlimited number of times' : `up to ${d.next} time${d.next === 1 ? '' : 's'}`}. The card itself is unchanged — no reprint needed.`
+      );
+      setLimitFor(null);
+      load(skip);
+    } else {
+      // Keep the dialog open so the reason is visible and they can adjust.
+      setMsg(r?.message ?? 'Could not update the scan limit.');
     }
   }
 
@@ -373,6 +455,16 @@ export default function InvitationsPage() {
                           <RescanIcon />
                         </button>
                       )}
+                      {inv.status !== 'revoked' && can('canManageInvites') && (
+                        <button
+                          onClick={() => openLimitEditor(inv)}
+                          title="Edit scan limit"
+                          aria-label="Edit scan limit"
+                          className="rounded-md border border-brand-ice-200 p-1.5 text-brand-navy-700 hover:bg-brand-ice-50"
+                        >
+                          <ScansIcon />
+                        </button>
+                      )}
                       <button
                         onClick={() => viewCard(inv)}
                         title="View card"
@@ -476,6 +568,69 @@ export default function InvitationsPage() {
           </div>
         </div>
       )}
+
+      {limitFor && (() => {
+        const d = limitDraft(limitFor);
+        const toneCls = { info: 'bg-brand-ice-50 text-brand-navy-700', good: 'bg-emerald-50 text-emerald-800', warn: 'bg-amber-50 text-amber-800', bad: 'bg-red-50 text-red-700' }[d.tone];
+        const step = (delta: number) => {
+          const cur = Number(limitValue);
+          const base = Number.isInteger(cur) ? cur : limitFor.usageCount;
+          setLimitValue(String(Math.min(9999, Math.max(1, base + delta))));
+        };
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-navy-950/50 p-4">
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-brand">
+              <h3 className="text-lg font-semibold text-brand-navy-900">Scan limit for {limitFor.tag ?? limitFor.serialNumber}</h3>
+              <p className="mt-1 text-sm text-brand-navy-700/70">
+                Change how many times this card can be scanned. The QR code and card image stay exactly as they are, so
+                nothing needs reprinting.
+              </p>
+
+              <div className="mt-4 grid grid-cols-2 gap-3 text-center">
+                <div className="rounded-xl bg-brand-ice-50 p-3">
+                  <p className="text-xs uppercase tracking-wide text-brand-navy-700/50">Scanned so far</p>
+                  <p className="text-2xl font-semibold text-brand-navy-900">{limitFor.usageCount}</p>
+                </div>
+                <div className="rounded-xl bg-brand-ice-50 p-3">
+                  <p className="text-xs uppercase tracking-wide text-brand-navy-700/50">Current limit</p>
+                  <p className="text-2xl font-semibold text-brand-navy-900">{limitFor.usageLimit === null ? '∞' : limitFor.usageLimit}</p>
+                </div>
+              </div>
+
+              <label className="mt-4 flex items-center gap-2 text-sm text-brand-navy-800">
+                <input type="checkbox" checked={limitUnlimited} onChange={(e) => setLimitUnlimited(e.target.checked)} />
+                Unlimited scans
+              </label>
+
+              <div className={`mt-3 flex items-center gap-2 ${limitUnlimited ? 'pointer-events-none opacity-40' : ''}`}>
+                <button type="button" onClick={() => step(-1)} aria-label="Decrease" className="h-10 w-10 rounded-lg border border-brand-ice-200 text-lg text-brand-navy-700 hover:bg-brand-ice-50">−</button>
+                <input
+                  type="number" inputMode="numeric" min={1} max={9999} value={limitValue}
+                  onChange={(e) => setLimitValue(e.target.value)}
+                  aria-label="New scan limit"
+                  className="h-10 w-full rounded-lg border border-brand-ice-200 bg-brand-ice-50 px-3 text-center text-lg font-semibold text-brand-navy-900 outline-none focus:border-brand-blue-500 focus:bg-white"
+                />
+                <button type="button" onClick={() => step(1)} aria-label="Increase" className="h-10 w-10 rounded-lg border border-brand-ice-200 text-lg text-brand-navy-700 hover:bg-brand-ice-50">+</button>
+              </div>
+
+              <p className={`mt-3 rounded-lg px-3 py-2 text-sm ${toneCls}`} role="status">{d.note}</p>
+
+              <div className="mt-5 flex justify-end gap-2">
+                <button onClick={() => setLimitFor(null)} disabled={limitSaving} className="rounded-lg border border-brand-ice-200 px-4 py-2 text-sm text-brand-navy-700 hover:bg-brand-ice-50 disabled:opacity-50">
+                  Cancel
+                </button>
+                <button
+                  onClick={saveLimit}
+                  disabled={!d.valid || limitSaving}
+                  className="rounded-lg bg-brand-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-blue-600 disabled:opacity-50"
+                >
+                  {limitSaving ? 'Saving…' : 'Save limit'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {deleteTargets && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-navy-950/50 p-4">

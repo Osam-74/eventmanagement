@@ -8,6 +8,7 @@ import {
   serialGeometryBelowQr,
   resolveQrGeometry,
   QR_BOX_GOLD,
+  SERIAL_GREEN,
   REFERENCE_CANVAS,
   REFERENCE_QR_BOX,
 } from '@/lib/invitation/geometry';
@@ -34,7 +35,7 @@ describe('resolveSerialGeometry', () => {
     });
     const approved = deriveTemplateGeometry(REFERENCE_CANVAS.width, REFERENCE_CANVAS.height).serial;
     expect(r).toEqual(approved);
-    expect(r.plate).toBe(false);
+    expect(r.plate).toBe(true);
   });
 
   it('falls back to the approved default when the stored template predates serial support', () => {
@@ -60,13 +61,13 @@ describe('resolveSerialGeometry', () => {
     expect(r).toEqual(deriveTemplateGeometry(REFERENCE_CANVAS.width, REFERENCE_CANVAS.height).serial);
   });
 
-  it('places the serial directly under the QR, centered on it, gold text with no plate', () => {
+  it('places the serial directly under the QR, centered on it, green text on a white plate', () => {
     const g = deriveTemplateGeometry(REFERENCE_CANVAS.width, REFERENCE_CANVAS.height);
     const qr = g.qr;
     const serial = g.serial;
     expect(serial.enabled).toBe(true);
-    expect(serial.plate).toBe(false);
-    expect(serial.color).toBe('#C5A059');
+    expect(serial.plate).toBe(true);
+    expect(serial.color).toBe(SERIAL_GREEN);
     // horizontally centered on the QR box
     expect(serial.x).toBe(Math.round(qr.x + qr.size / 2));
     // starts clearly BELOW the QR box

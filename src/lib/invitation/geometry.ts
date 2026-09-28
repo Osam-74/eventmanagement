@@ -20,6 +20,11 @@ export const QR_W_RATIO = 0.220561;
 // consistent brand treatment.
 export const QR_BOX_GOLD = '#C5A059';
 
+// Serial / tag text colour (owner restyle 2026-09-28): a deep green that
+// reads crisply on the white plate at any output size. The gold above is
+// still used by the QR box frame and the "ACCESS CODE" caption.
+export const SERIAL_GREEN = '#0B7A3B';
+
 export type QrBoxGeometry = {
   color: string;
   // All three ratios are relative to qr.size, so the box scales cleanly
@@ -149,8 +154,12 @@ export function serialGeometryBelowQr(
     x: Math.round(qr.x + qr.size / 2),
     y: Math.round(qr.y + qr.size + 0.0551020 * canvasHeight),
     fontSize: Math.round(0.0196262 * canvasWidth),
-    color: '#C5A059',
-    plate: false,
+    // Owner restyle (2026-09-28): the serial/tag is now GREEN text on a
+    // WHITE rounded plate (was gold text, no plate). The plate is drawn by
+    // render.ts and sized to the actual text, so any tag length gets a
+    // fitted background. Position/size above are untouched.
+    color: SERIAL_GREEN,
+    plate: true,
   };
 }
 

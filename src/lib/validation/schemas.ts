@@ -164,6 +164,14 @@ export const regenerateInvitationSchema = z.object({
   reason: z.string().max(300).default('Regenerated — rendering fix'),
 });
 
+// Edit a card's scan allowance after generation (owner request 2026-09-28).
+// usageLimit: a whole number 1..9999, or null for unlimited — the same
+// range/meaning as at generation time (see generateBatchSchema).
+export const updateUsageLimitSchema = z.object({
+  usageLimit: z.number().int().min(1).max(9999).nullable(),
+  reason: z.string().max(300).default(''),
+});
+
 export const allowRescanSchema = z.object({
   reason: z.string().min(3).max(300),
 });

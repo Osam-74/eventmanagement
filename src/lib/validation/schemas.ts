@@ -209,3 +209,24 @@ export const updateAdminSchema = z.object({
   displayName: z.string().min(2).max(80).optional(),
   permissions: partialPermissionSchema.optional(),
 });
+
+// ---- Guest moments (photo/video uploads to Cloudflare R2), 2026-09-29 ----
+const guestId = z.string().regex(/^[A-Za-z0-9_-]{16,64}$/, 'Invalid guest id');
+
+export const momentsStartSchema = z.object({
+  guestId,
+  files: z
+    .array(z.object({ name: z.string().max(200), type: z.string().max(100), size: z.number().int().min(1).max(100 * 1024 * 1024) }))
+    .min(1)
+    .max(20),
+});
+
+export const momentsCompleteSchema = z.object({
+  guestId,
+  momentId: z.string().min(8).max(40),
+  parts: z.array(z.object({ PartNumber: z.number().int().min(1).max(10000), ETag: z.string().min(1).max(200) })).max(10000).optional(),
+});
+
+export const momentsAbortSchema = z.object({ guestId, momentId: z.string().min(8).max(40) });
+
+export const momentsIdsSchema = z.object({ ids: z.array(z.string().min(8).max(40)).min(1).max(500) });

@@ -25,6 +25,7 @@ const NAV = [
   { href: '/admin/templates', label: 'Templates' },
   { href: '/admin/generate', label: 'Generate' },
   { href: '/admin/invitations', label: 'Invitations' },
+  { href: '/admin/moments', label: 'Guest moments' },
   { href: '/admin/ushers', label: 'Ushers' },
   { href: '/admin/admins', label: 'Admins' },
   { href: '/admin/logs', label: 'Scan logs' },

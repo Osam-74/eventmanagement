@@ -53,6 +53,13 @@ FIREBASE_STORAGE_BUCKET=event-management-b5999.firebasestorage.app
 QR_TOKEN_HMAC_KEY=...
 USHER_PIN_PEPPER=...
 USHER_SESSION_SECRET=...
+
+# Guest photo/video uploads (Cloudflare R2). Optional: without these the
+# "Guest moments" feature is simply switched off. See section 3a.
+R2_ACCOUNT_ID=...
+R2_ACCESS_KEY_ID=...
+R2_SECRET_ACCESS_KEY=...
+R2_BUCKET=...
 ```
 
 3. Server routes run on the Node runtime (already configured per-route).
@@ -60,6 +67,48 @@ USHER_SESSION_SECRET=...
    on plans that cap at 60s, keep batches ≤ 50 share-profile cards and
    expect HQ batches to run smaller.
 4. Deploy and confirm HTTPS.
+
+## 3a. Guest moments: Cloudflare R2 (photos and videos from guests)
+
+Guests open `/moments/<event-slug>` (no sign-in), pick photos/videos from their
+phone gallery, and the files upload **straight to Cloudflare R2**. They never
+touch Firebase Storage (where the invitation cards live) and never pass through
+a Vercel function. Max **100 MB per file**; each guest can add up to 40 files.
+
+**One-time setup (Cloudflare dashboard):**
+
+1. R2 > **Create bucket** (e.g. `event-moments`). Keep it **private** (no public access).
+2. R2 > **Manage R2 API Tokens** > Create API token > permission
+   **Object Read & Write**, limited to that one bucket. Copy the
+   *Access Key ID* and *Secret Access Key* (shown once), and note your
+   *Account ID* (R2 overview page).
+3. Bucket > Settings > **CORS policy**: browsers upload directly, so R2 must allow it.
+   `ExposeHeaders: ETag` is **required**: large videos are uploaded in parts and
+   the page needs each part's ETag to finish them.
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://YOUR-SITE-DOMAIN"],
+    "AllowedMethods": ["PUT"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+4. Add the four `R2_*` variables in Vercel (Production) and redeploy.
+5. Deploy the new Firestore indexes: `firebase deploy --only firestore:indexes`
+   (the `moments` collection needs them; the emulator does not).
+
+**Using it:** Admin > **Guest moments** shows the guest link for the selected
+event (copy it, or turn it into a QR code), a grid of everything uploaded, and
+**Export selected** / **Export all** (zip) / **Delete marked**.
+
+**Cost notes:** R2 has no download (egress) fees and a free tier of 10 GB stored
+per month. Deleting media after you have exported it brings the ongoing cost to
+zero. Set a Cloudflare billing notification if you want an early warning.
 
 ## 4. Bootstrap the single Root Admin
 

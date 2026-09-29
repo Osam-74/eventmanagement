@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isDrawableSerialText, DRAWABLE_SERIAL_PUNCTUATION } from '@/lib/invitation/serialGlyphs';
 
 export const permissionSchema = z.object({
   canManageAdmins: z.boolean().optional().default(false),
@@ -116,7 +117,14 @@ export const generateBatchSchema = z
       .string()
       .trim()
       .max(24, 'Tag must be 24 characters or fewer')
-      .regex(/^[a-zA-Z0-9 .-]*$/, 'Tag can only contain letters, numbers, spaces, "." and "-"')
+      // Tags are uppercased before printing (see generate/route.ts), and the
+      // card face is drawn from a fixed glyph table. Accept exactly what that
+      // table can draw (letters, digits, space and common punctuation such as
+      // the apostrophe in "BRIDE'S FAMILY") — derived from the table itself so
+      // the validator and the renderer can never disagree again.
+      .refine((v) => isDrawableSerialText(v.toUpperCase()), {
+        message: `Tag can only contain letters, numbers, spaces and these symbols: ${DRAWABLE_SERIAL_PUNCTUATION}`,
+      })
       .optional(),
     usageLimit: z.number().int().min(1).max(9999).nullable().optional(),
   })

@@ -98,3 +98,22 @@ describe('tag characters', () => {
     }
   });
 });
+
+import { updateTagSchema } from '@/lib/validation/schemas';
+
+describe('updateTagSchema (editing the tag on an existing card)', () => {
+  it('accepts what generation accepts, including the apostrophe and an empty/null tag', () => {
+    for (const tag of ['VIP', "BRIDE'S FAMILY", 'TABLE 4', 'a'.repeat(24), 'vip', '  spaced  ']) {
+      expect(updateTagSchema.safeParse({ tag }).success, tag).toBe(true);
+    }
+    expect(updateTagSchema.safeParse({ tag: null }).success).toBe(true);
+    expect(updateTagSchema.safeParse({ tag: '' }).success).toBe(true);
+  });
+  it('rejects too long, characters the card font cannot draw, and a missing field', () => {
+    for (const tag of ['a'.repeat(25), 'VIP<script>', 'CAFÉ', 'EMOJI 😀', 'TAB\tTAB']) {
+      expect(updateTagSchema.safeParse({ tag }).success, tag).toBe(false);
+    }
+    expect(updateTagSchema.safeParse({}).success).toBe(false);
+    expect(updateTagSchema.safeParse({ tag: 5 }).success).toBe(false);
+  });
+});

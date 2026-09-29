@@ -5,6 +5,7 @@ import { generateQrToken } from '@/lib/qr/token';
 import { digestToken } from '@/lib/qr/digest';
 import { resolveSerialGeometry, resolveQrBoxGeometry, resolveAccessLabelGeometry, resolveQrGeometry } from '@/lib/invitation/geometry';
 import { renderInvitationImage } from '@/lib/invitation/render';
+import { retagInvitationImage } from '@/lib/invitation/retag';
 
 type Bucket = ReturnType<typeof bucketFn>;
 
@@ -439,6 +440,109 @@ export async function updateInvitationUsageLimit(
     });
   }
   return { ok: true, serialNumber: a.serial, usageCount: a.usageCount, usageLimit: newLimit, status: a.status, changed: a.changed };
+}
+
+/**
+ * Change the tag printed on an EXISTING card (or clear it so the serial is
+ * printed again) WITHOUT changing its QR code.
+ *
+ * The invitation's document id is the digest of its QR token, so as long as
+ * the id is unchanged the QR on every guest's copy still scans. This never
+ * creates a new token or document and never revokes anything: it repaints
+ * only the serial/tag plate on the stored card image (see retag.ts), saves
+ * it to a new storage path, points the document at it, and only then
+ * deletes the previous image file — so a failure part-way leaves a working
+ * card, never a broken one.
+ *
+ * `newTag`: the text to print (already validated/uppercased by the caller),
+ * or null/'' to print the card's serial number instead.
+ */
+export async function updateInvitationTag(
+  firestore: Firestore,
+  bucket: Bucket,
+  input: { invitationId: string; newTag: string | null; reason: string; admin: AdminActor }
+): Promise<ServiceResult<{ serialNumber: string | null; tag: string | null; printed: string; changed: boolean; imageUrl: string | null }>> {
+  const { invitationId, reason, admin } = input;
+  const nextTag = input.newTag && input.newTag.trim() ? input.newTag.trim() : null;
+  const ref = firestore.collection('invitations').doc(invitationId);
+
+  const snap = await ref.get();
+  if (!snap.exists) return { ok: false, code: 'NOT_FOUND', message: 'Invitation not found' };
+  const data = snap.data()!;
+  if (data.status === 'revoked') {
+    return { ok: false, code: 'REVOKED', message: 'A revoked card cannot be edited.' };
+  }
+  const serial = data.serialNumber as string;
+  const oldTag = (data.tag as string | null) ?? null;
+  const oldText = oldTag ?? serial;
+  const newText = nextTag ?? serial;
+  if (oldText === newText) {
+    return { ok: true, serialNumber: serial, tag: oldTag, printed: oldText, changed: false, imageUrl: null };
+  }
+  const oldPath = data.imageStoragePath as string | undefined;
+  if (!oldPath) return { ok: false, code: 'ERROR', message: 'This card has no stored image to edit.' };
+
+  const eventId = data.eventId as string;
+  const profile = (data.outputProfile as 'share' | 'hq') ?? 'share';
+  const eventSnap = await firestore.collection('events').doc(eventId).get();
+  if (!eventSnap.exists || !eventSnap.data()!.templateId) return { ok: false, code: 'ERROR', message: 'Event has no template assigned' };
+  const templateSnap = await firestore.collection('templates').doc(eventSnap.data()!.templateId as string).get();
+  if (!templateSnap.exists) return { ok: false, code: 'ERROR', message: 'Template not found' };
+  const template = templateSnap.data()!;
+
+  let newPath: string;
+  try {
+    const [existingCard] = await bucket.file(oldPath).download();
+    const [templateBuffer] = await bucket.file(template.storagePath as string).download();
+    const qrGeometry = resolveQrGeometry(template.canvasWidth as number, template.canvasHeight as number, template.qrOverride as never);
+    const geometry = {
+      canvasWidth: template.canvasWidth as number,
+      canvasHeight: template.canvasHeight as number,
+      qr: qrGeometry,
+      accessLabel: resolveAccessLabelGeometry({ canvasWidth: template.canvasWidth as number, canvasHeight: template.canvasHeight as number, qr: qrGeometry }),
+      serial: resolveSerialGeometry({ canvasWidth: template.canvasWidth as number, canvasHeight: template.canvasHeight as number, qr: qrGeometry, serial: template.serial as never }),
+      qrBox: resolveQrBoxGeometry(template.qrBox as never),
+    };
+    const { buffer } = await retagInvitationImage({ existingCard, templateBuffer, geometry, oldText, newText, profile });
+    newPath = `events/${eventId}/invitations/${(data.batchId as string) ?? 'edited'}/${serial}-t${Date.now()}.jpg`;
+    await bucket.file(newPath).save(buffer, {
+      contentType: 'image/jpeg',
+      metadata: { contentType: 'image/jpeg', metadata: { serial, eventId, retaggedFrom: oldPath } },
+    });
+  } catch (e) {
+    console.error('retag render error', (e as Error).message);
+    return { ok: false, code: 'ERROR', message: 'Could not update the card image. Nothing was changed.' };
+  }
+
+  try {
+    await firestore.runTransaction(async (tx) => {
+      const fresh = await tx.get(ref);
+      if (!fresh.exists) throw new RevocationError('NOT_FOUND', 'Invitation not found');
+      if (fresh.data()!.status === 'revoked') throw new RevocationError('REVOKED', 'The card was revoked while editing.');
+      // Someone else retagged it while we rendered: don't silently overwrite their change.
+      if (fresh.data()!.imageStoragePath !== oldPath) throw new RevocationError('ERROR', 'This card was edited by someone else. Reload and try again.');
+      tx.update(ref, { tag: nextTag, imageStoragePath: newPath });
+    });
+  } catch (e) {
+    await bucket.file(newPath).delete().catch(() => undefined); // discard the unused render
+    if (e instanceof RevocationError) return { ok: false, code: e.code, message: e.message };
+    console.error('retag commit error', (e as Error).message);
+    return { ok: false, code: 'ERROR', message: 'Could not save the change.' };
+  }
+
+  // The document now points at the new image; the old file is garbage.
+  await bucket.file(oldPath).delete().catch(() => undefined);
+
+  await firestore.collection('auditLogs').add({
+    action: 'INVITATION_TAG_CHANGED',
+    actor: admin.uid,
+    actorType: 'admin',
+    detail: { invitationId, serialNumber: serial, from: oldTag, to: nextTag, reason },
+    at: FieldValue.serverTimestamp(),
+  });
+
+  const [imageUrl] = await bucket.file(newPath).getSignedUrl({ action: 'read', expires: Date.now() + 10 * 60 * 1000 });
+  return { ok: true, serialNumber: serial, tag: nextTag, printed: newText, changed: true, imageUrl };
 }
 
 /**

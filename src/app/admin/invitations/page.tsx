@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { adminJson } from '@/lib/client/api';
 import { useAdmin, useSelectedEvent } from '@/lib/client/useAdmin';
+import { isDrawableSerialText, DRAWABLE_SERIAL_PUNCTUATION } from '@/lib/invitation/serialGlyphs';
 
 type Invitation = {
   id: string;
@@ -134,6 +135,8 @@ export default function InvitationsPage() {
   const [limitUnlimited, setLimitUnlimited] = useState(false);
   const [limitValue, setLimitValue] = useState('1');
   const [limitSaving, setLimitSaving] = useState(false);
+  // Tag draft for the same dialog. Empty string means "print the serial".
+  const [tagValue, setTagValue] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleteTargets, setDeleteTargets] = useState<Invitation[] | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -212,6 +215,26 @@ export default function InvitationsPage() {
     setLimitFor(inv);
     setLimitUnlimited(inv.usageLimit === null);
     setLimitValue(String(inv.usageLimit ?? Math.max(inv.usageCount, 1)));
+    setTagValue(inv.tag ?? '');
+  }
+
+  // What the tag draft would do. Mirrors the server rules (max 24, only
+  // characters the card font can draw, printed uppercase) so a bad tag can't
+  // be submitted; the server re-validates regardless.
+  function tagDraft(inv: Invitation): { changed: boolean; valid: boolean; next: string | null; note: string; tone: 'info' | 'good' | 'bad' } {
+    const trimmed = tagValue.trim();
+    const next = trimmed ? trimmed.toUpperCase() : null;
+    const changed = next !== (inv.tag ?? null);
+    if (trimmed.length > 24) return { changed, valid: false, next, tone: 'bad', note: 'Tag must be 24 characters or fewer.' };
+    if (trimmed && !isDrawableSerialText(trimmed.toUpperCase())) {
+      return { changed, valid: false, next, tone: 'bad', note: `Only letters, numbers, spaces and these symbols: ${DRAWABLE_SERIAL_PUNCTUATION}` };
+    }
+    if (!changed) return { changed, valid: true, next, tone: 'info', note: inv.tag ? `Printed on the card: ${inv.tag}` : `Printing the serial number: ${inv.serialNumber}` };
+    return {
+      changed, valid: true, next, tone: 'good',
+      note: next ? `The card will print "${next}". The QR code stays exactly the same, so cards already shared still scan.`
+                 : `The card will print its serial number (${inv.serialNumber}) again. The QR code stays exactly the same.`,
+    };
   }
 
   // What the draft would do — drives the live preview AND gates Save, so an
@@ -219,12 +242,14 @@ export default function InvitationsPage() {
   // never even be submitted. The server re-validates all of it regardless.
   function limitDraft(inv: Invitation): {
     valid: boolean;
+    /** true when the draft simply equals the current limit (nothing to send, nothing wrong). */
+    unchanged?: boolean;
     next: number | null;
     note: string;
     tone: 'info' | 'good' | 'warn' | 'bad';
   } {
     if (limitUnlimited) {
-      return { valid: inv.usageLimit !== null, next: null, tone: 'good',
+      return { valid: inv.usageLimit !== null, unchanged: inv.usageLimit === null, next: null, tone: 'good',
         note: inv.usageLimit === null ? 'Already unlimited.' : 'Unlimited: this card will keep admitting with no cap.' };
     }
     const n = Number(limitValue);
@@ -235,7 +260,7 @@ export default function InvitationsPage() {
       return { valid: false, next: n, tone: 'bad',
         note: `Already scanned ${inv.usageCount} time${inv.usageCount === 1 ? '' : 's'} — the limit can't be lower than ${inv.usageCount}.` };
     }
-    if (n === inv.usageLimit) return { valid: false, next: n, tone: 'info', note: 'No change from the current limit.' };
+    if (n === inv.usageLimit) return { valid: false, unchanged: true, next: n, tone: 'info', note: 'No change from the current limit.' };
     if (n === inv.usageCount) {
       return { valid: true, next: n, tone: 'warn', note: `This will lock the card now: all ${n} scan${n === 1 ? ' is' : 's are'} already used.` };
     }
@@ -248,22 +273,45 @@ export default function InvitationsPage() {
   async function saveLimit() {
     if (!limitFor) return;
     const d = limitDraft(limitFor);
-    if (!d.valid) return;
+    const t = tagDraft(limitFor);
+    // Only send what actually changed; each part is validated on its own.
+    const limitChanged = d.valid;
+    const tagChanged = t.changed && t.valid;
+    // A limit that is invalid (not merely unchanged) must block the save,
+    // never be silently skipped while the tag goes through.
+    const limitBad = !d.valid && !d.unchanged;
+    if ((!limitChanged && !tagChanged) || !t.valid || limitBad) return;
     setLimitSaving(true);
-    const r = await adminJson<{ ok: boolean; message?: string; usageLimit?: number | null }>(
-      `/api/admin/invitations/${limitFor.id}/usage-limit`,
-      { method: 'POST', body: JSON.stringify({ usageLimit: d.next, reason: 'Scan limit edited from admin console' }) }
-    ).catch(() => null);
+    const done: string[] = [];
+    const failed: string[] = [];
+
+    if (tagChanged) {
+      const r = await adminJson<{ ok: boolean; message?: string }>(
+        `/api/admin/invitations/${limitFor.id}/tag`,
+        { method: 'POST', body: JSON.stringify({ tag: t.next, reason: 'Tag edited from admin console' }) }
+      ).catch(() => null);
+      if (r?.ok) done.push(t.next ? `now prints "${t.next}"` : `now prints its serial number`);
+      else failed.push(r?.message ?? 'Could not update the tag.');
+    }
+    if (limitChanged) {
+      const r = await adminJson<{ ok: boolean; message?: string }>(
+        `/api/admin/invitations/${limitFor.id}/usage-limit`,
+        { method: 'POST', body: JSON.stringify({ usageLimit: d.next, reason: 'Scan limit edited from admin console' }) }
+      ).catch(() => null);
+      if (r?.ok) done.push(`can be scanned ${d.next === null ? 'an unlimited number of times' : `up to ${d.next} time${d.next === 1 ? '' : 's'}`}`);
+      else failed.push(r?.message ?? 'Could not update the scan limit.');
+    }
     setLimitSaving(false);
-    if (r?.ok) {
-      setMsg(
-        `${limitFor.tag ?? limitFor.serialNumber} can now be scanned ${d.next === null ? 'an unlimited number of times' : `up to ${d.next} time${d.next === 1 ? '' : 's'}`}. The card itself is unchanged — no reprint needed.`
-      );
+
+    const label = limitFor.tag ?? limitFor.serialNumber;
+    if (failed.length === 0) {
+      setMsg(`${label} ${done.join(' and ')}. The QR code is unchanged — no reprint needed for shared cards.`);
       setLimitFor(null);
       load(skip);
     } else {
-      // Keep the dialog open so the reason is visible and they can adjust.
-      setMsg(r?.message ?? 'Could not update the scan limit.');
+      // Keep the dialog open so the reason is visible; refresh so anything that DID save is shown.
+      setMsg(`${done.length ? `${label} ${done.join(' and ')}. ` : ''}${failed.join(' ')}`);
+      if (done.length) load(skip);
     }
   }
 
@@ -458,8 +506,8 @@ export default function InvitationsPage() {
                       {inv.status !== 'revoked' && can('canManageInvites') && (
                         <button
                           onClick={() => openLimitEditor(inv)}
-                          title="Edit scan limit"
-                          aria-label="Edit scan limit"
+                          title="Edit card (tag / scan limit)"
+                          aria-label="Edit card"
                           className="rounded-md border border-brand-ice-200 p-1.5 text-brand-navy-700 hover:bg-brand-ice-50"
                         >
                           <ScansIcon />
@@ -571,6 +619,10 @@ export default function InvitationsPage() {
 
       {limitFor && (() => {
         const d = limitDraft(limitFor);
+        const t = tagDraft(limitFor);
+        const tagToneCls = { info: 'bg-brand-ice-50 text-brand-navy-700', good: 'bg-emerald-50 text-emerald-800', bad: 'bg-red-50 text-red-700' }[t.tone];
+        const limitBad = !d.valid && !d.unchanged;
+        const anyChange = d.valid || (t.changed && t.valid);
         const toneCls = { info: 'bg-brand-ice-50 text-brand-navy-700', good: 'bg-emerald-50 text-emerald-800', warn: 'bg-amber-50 text-amber-800', bad: 'bg-red-50 text-red-700' }[d.tone];
         const step = (delta: number) => {
           const cur = Number(limitValue);
@@ -580,11 +632,23 @@ export default function InvitationsPage() {
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-navy-950/50 p-4">
             <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-brand">
-              <h3 className="text-lg font-semibold text-brand-navy-900">Scan limit for {limitFor.tag ?? limitFor.serialNumber}</h3>
+              <h3 className="text-lg font-semibold text-brand-navy-900">Edit card {limitFor.tag ?? limitFor.serialNumber}</h3>
               <p className="mt-1 text-sm text-brand-navy-700/70">
-                Change how many times this card can be scanned. The QR code and card image stay exactly as they are, so
-                nothing needs reprinting.
+                Change the printed tag and/or how many times this card can be scanned. The QR code never changes, so
+                cards already shared keep working.
               </p>
+
+              <label htmlFor="card-tag" className="mt-4 block text-sm font-medium text-brand-navy-800">Printed tag / serial</label>
+              <input
+                id="card-tag" type="text" value={tagValue} maxLength={24} autoComplete="off"
+                onChange={(e) => setTagValue(e.target.value)}
+                placeholder={limitFor.serialNumber}
+                className="mt-1 h-10 w-full rounded-lg border border-brand-ice-200 bg-brand-ice-50 px-3 text-sm uppercase text-brand-navy-900 outline-none focus:border-brand-blue-500 focus:bg-white"
+              />
+              <p className={`mt-2 rounded-lg px-3 py-2 text-xs ${tagToneCls}`} role="status">{t.note}</p>
+              <p className="mt-1 text-xs text-brand-navy-700/60">Leave empty to print the serial number ({limitFor.serialNumber}).</p>
+
+              <p className="mt-5 text-sm font-medium text-brand-navy-800">Scan limit</p>
 
               <div className="mt-4 grid grid-cols-2 gap-3 text-center">
                 <div className="rounded-xl bg-brand-ice-50 p-3">
@@ -621,10 +685,10 @@ export default function InvitationsPage() {
                 </button>
                 <button
                   onClick={saveLimit}
-                  disabled={!d.valid || limitSaving}
+                  disabled={!anyChange || !t.valid || limitBad || limitSaving}
                   className="rounded-lg bg-brand-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-blue-600 disabled:opacity-50"
                 >
-                  {limitSaving ? 'Saving…' : 'Save limit'}
+                  {limitSaving ? 'Saving…' : 'Save changes'}
                 </button>
               </div>
             </div>

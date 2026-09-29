@@ -180,6 +180,21 @@ export const updateUsageLimitSchema = z.object({
   reason: z.string().max(300).default(''),
 });
 
+// Edit the tag printed on an existing card. Same rules as at generation
+// (max 24, only characters the card font can draw, printed UPPERCASE).
+// Empty string / null = print the card's serial number instead.
+export const updateTagSchema = z.object({
+  tag: z
+    .string()
+    .trim()
+    .max(24, 'Tag must be 24 characters or fewer')
+    .refine((v) => isDrawableSerialText(v.toUpperCase()), {
+      message: `Tag can only contain letters, numbers, spaces and these symbols: ${DRAWABLE_SERIAL_PUNCTUATION}`,
+    })
+    .nullable(),
+  reason: z.string().max(300).default(''),
+});
+
 export const allowRescanSchema = z.object({
   reason: z.string().min(3).max(300),
 });

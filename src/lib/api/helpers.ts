@@ -117,3 +117,27 @@ export async function requireMomentsAccess(
   if (!canAccessMomentsEvent(res.admin, eventId)) return { error: forbidden('You do not have access to this event\'s moments.') };
   return res;
 }
+
+/**
+ * Turn an unexpected failure inside a moments endpoint into a JSON response
+ * that says what actually went wrong, instead of an empty 500 (which the UI
+ * used to mis-report as "no access"). A Firestore "index required" error is
+ * recognised and explained; the raw text is logged server-side only.
+ */
+export function momentsFailure(scope: string, e: unknown) {
+  const raw = e instanceof Error ? e.message : String(e);
+  console.error(`[moments:${scope}]`, raw);
+  if (/FAILED_PRECONDITION|requires an index|index/i.test(raw) && /index/i.test(raw)) {
+    return NextResponse.json(
+      { ok: false, code: 'INDEX_MISSING', message: 'Guest moments needs its database indexes deployed. Ask the developer to run: firebase deploy --only firestore:indexes (they take a few minutes to build).' },
+      { status: 500 }
+    );
+  }
+  if (/R2 is not configured|R2_/i.test(raw)) {
+    return NextResponse.json(
+      { ok: false, code: 'STORAGE_NOT_CONFIGURED', message: 'Photo and video storage (R2) is not connected yet. Add the R2 settings in Vercel and redeploy.' },
+      { status: 500 }
+    );
+  }
+  return serverError('Could not load guest moments. Please try again.');
+}

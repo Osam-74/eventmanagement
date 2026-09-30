@@ -6,6 +6,7 @@ import { digestToken } from '@/lib/qr/digest';
 import { resolveSerialGeometry, resolveQrBoxGeometry, resolveAccessLabelGeometry, resolveQrGeometry } from '@/lib/invitation/geometry';
 import { renderInvitationImage } from '@/lib/invitation/render';
 import { retagInvitationImage } from '@/lib/invitation/retag';
+import { isContentionAbort, delay } from '@/lib/services/scan';
 
 type Bucket = ReturnType<typeof bucketFn>;
 
@@ -344,6 +345,27 @@ export type UsageLimitDecision =
   | { ok: true; nextStatus: 'used' | 'unused'; totalUsedDelta: -1 | 0 | 1; changed: boolean }
   | { ok: false; code: 'REVOKED' | 'BELOW_USED'; message: string };
 
+/**
+ * Run a Firestore transaction, retrying with backoff when it is aborted by
+ * contention. Gate scans hit the same card document, so an admin edit made
+ * during a burst can be aborted through no fault of its own. Every attempt
+ * re-reads the live document, so a retry can never double-apply.
+ */
+async function runTransactionWithRetry(firestore: Firestore, update: Parameters<Firestore['runTransaction']>[0]): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await firestore.runTransaction(update);
+      return;
+    } catch (e) {
+      if (attempt < 6 && isContentionAbort(e)) {
+        await delay(Math.min(100 * 2 ** (attempt - 1), 3000) + Math.random() * 150);
+        continue;
+      }
+      throw e;
+    }
+  }
+}
+
 export function decideUsageLimitChange(
   current: { status: string; usageCount: number; usageLimit: number | null },
   newLimit: number | null
@@ -388,7 +410,7 @@ export async function updateInvitationUsageLimit(
   let audit: { serial: string | null; previous: number | null; usageCount: number; status: 'used' | 'unused'; changed: boolean } | null = null;
 
   try {
-    await firestore.runTransaction(async (tx) => {
+    await runTransactionWithRetry(firestore, async (tx) => {
       // ---- reads ----
       const snap = await tx.get(invitationRef);
       if (!snap.exists) throw new RevocationError('NOT_FOUND', 'Invitation not found');

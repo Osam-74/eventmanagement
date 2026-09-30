@@ -53,12 +53,12 @@ export type ScanInput = {
  */
 const MAX_SCAN_ATTEMPTS = 6;
 
-function isContentionAbort(e: unknown): boolean {
+export function isContentionAbort(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e);
   return msg.includes('ABORTED') || msg.includes('Transaction lock timeout') || msg.includes('too much contention');
 }
 
-async function delay(ms: number): Promise<void> {
+export async function delay(ms: number): Promise<void> {
   await new Promise((r) => setTimeout(r, ms));
 }
 

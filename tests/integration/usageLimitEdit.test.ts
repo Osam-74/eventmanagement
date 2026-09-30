@@ -156,4 +156,38 @@ describe.skipIf(!hasEmu)('editing a card scan allowance', () => {
     // Status is consistent with the numbers: locked iff the allowance is used up.
     expect(doc.status).toBe(doc.usageCount >= (doc.usageLimit as number) ? 'used' : 'unused');
   });
+
+  it('an edit aborted by contention is retried and succeeds (no spurious "Could not update")', async () => {
+    const inv = await seedInvitation(db!.db, { serialNumber: 'ISWED-01012', usageLimit: 5 });
+    // Make the first 2 transactions abort exactly as Firestore does under contention.
+    const real = db!.db.runTransaction.bind(db!.db);
+    let calls = 0;
+    (db!.db as unknown as { runTransaction: unknown }).runTransaction = (fn: never, opts: never) => {
+      calls++;
+      if (calls <= 2) return Promise.reject(new Error('10 ABORTED: Too much contention on these documents'));
+      return real(fn, opts);
+    };
+    try {
+      const r = await edit(inv.digest, 9);
+      expect(r).toMatchObject({ ok: true, usageLimit: 9 });
+      expect(calls).toBe(3); // two aborted, third committed
+      expect((await invitationDoc(db!.db, inv.digest)).usageLimit).toBe(9);
+    } finally {
+      (db!.db as unknown as { runTransaction: unknown }).runTransaction = real;
+    }
+  });
+
+  it('a genuinely non-contention failure is NOT retried forever', async () => {
+    const inv = await seedInvitation(db!.db, { serialNumber: 'ISWED-01013', usageLimit: 5 });
+    const real = db!.db.runTransaction.bind(db!.db);
+    let calls = 0;
+    (db!.db as unknown as { runTransaction: unknown }).runTransaction = () => { calls++; return Promise.reject(new Error('PERMISSION_DENIED')); };
+    try {
+      const r = await edit(inv.digest, 9);
+      expect(r).toMatchObject({ ok: false, code: 'ERROR' });
+      expect(calls).toBe(1);
+    } finally {
+      (db!.db as unknown as { runTransaction: unknown }).runTransaction = real;
+    }
+  });
 });

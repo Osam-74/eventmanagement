@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase/admin';
-import { requireMomentsAccess } from '@/lib/api/helpers';
+import { requireMomentsAccess, momentsFailure } from '@/lib/api/helpers';
 import { guestMomentsUrl } from '@/lib/moments/guestLink';
 import { listMoments, deleteMoments } from '@/lib/services/moments';
 import { momentsIdsSchema } from '@/lib/validation/schemas';
@@ -16,18 +16,22 @@ export async function GET(req: NextRequest) {
   const res = await requireMomentsAccess(req, 'canViewMoments', eventId);
   if ('error' in res) return res.error;
   if (!eventId) return NextResponse.json({ ok: false, message: 'eventId required' }, { status: 400 });
-  const guest = req.nextUrl.searchParams.get('guest');
-  const out = await listMoments(db(), { eventId, limit: 48, after: req.nextUrl.searchParams.get('after'), guestId: guest });
-  // The event's slug builds the public guest link shown on the admin page.
-  const ev = await db().collection('events').doc(eventId).get();
-  const slug = (ev.data()?.slug as string | undefined) ?? null;
-  // The share link/QR is its own capability: viewers without canShareMoments
-  // can see files but are never handed the link.
-  const canShare = res.admin.accountType === 'ROOT_ADMIN' || Boolean(res.admin.permissions?.canShareMoments);
-  return NextResponse.json({
-    ok: true, configured: r2Configured(), missing: r2MissingEnv(),
-    slug: canShare ? slug : null, guestLink: canShare && slug ? guestMomentsUrl(slug) : null, canShare, ...out,
-  });
+  try {
+    const guest = req.nextUrl.searchParams.get('guest');
+    const out = await listMoments(db(), { eventId, limit: 48, after: req.nextUrl.searchParams.get('after'), guestId: guest });
+    // The event's slug builds the public guest link shown on the admin page.
+    const ev = await db().collection('events').doc(eventId).get();
+    const slug = (ev.data()?.slug as string | undefined) ?? null;
+    // The share link/QR is its own capability: viewers without canShareMoments
+    // can see files but are never handed the link.
+    const canShare = res.admin.accountType === 'ROOT_ADMIN' || Boolean(res.admin.permissions?.canShareMoments);
+    return NextResponse.json({
+      ok: true, configured: r2Configured(), missing: r2MissingEnv(),
+      slug: canShare ? slug : null, guestLink: canShare && slug ? guestMomentsUrl(slug) : null, canShare, ...out,
+    });
+  } catch (e) {
+    return momentsFailure('list', e);
+  }
 }
 
 /** DELETE { ids } (with ?eventId=) -> permanently removes media from R2 and the index. */

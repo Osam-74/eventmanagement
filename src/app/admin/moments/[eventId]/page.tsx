@@ -29,7 +29,12 @@ function EventMomentsInner() {
 
   const loadFolders = useCallback(async () => {
     const r = await adminJson<{ ok: boolean; folders: Folder[]; message?: string }>(`/api/admin/moments/folders?eventId=${encodeURIComponent(eventId)}`).catch(() => null);
-    if (!r?.ok) { setErr(r?.message ?? 'You do not have access to this event, or it could not be loaded.'); setFolders([]); return; }
+    if (!r?.ok) {
+      // Say what really happened. A missing message means the request itself failed
+      // (network/server), which is NOT the same thing as "you have no access".
+      setErr(r?.message ?? 'Could not reach the server to load this event. Check your connection and refresh.');
+      setFolders([]); return;
+    }
     setFolders(r.folders);
   }, [eventId]);
 

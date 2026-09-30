@@ -48,6 +48,10 @@ export default function AdminsPage() {
   const [grantable, setGrantable] = useState<{ id: string; name: string }[]>([]);
   const [editEventsUid, setEditEventsUid] = useState<string | null>(null);
   const [editEvents, setEditEvents] = useState<string[]>([]);
+  // One-time "keep Guest moments working" migration (Root Admin only).
+  type BackfillPreview = { applied: boolean; eventCount: number; updated: { uid: string; name: string }[] };
+  const [backfill, setBackfill] = useState<BackfillPreview | null>(null);
+  const [backfillBusy, setBackfillBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [resetUid, setResetUid] = useState<string | null>(null); // which admin's reset is in flight
   const [resetSentUid, setResetSentUid] = useState<string | null>(null); // last one that succeeded
@@ -62,6 +66,17 @@ export default function AdminsPage() {
       .then((r) => setGrantable(r.ok ? r.events.map((e) => ({ id: e.id, name: e.name })) : []))
       .catch(() => setGrantable([]));
   }, []);
+
+  async function runBackfill(apply: boolean) {
+    setBackfillBusy(true);
+    const r = await adminJson<BackfillPreview & { ok: boolean; message?: string }>('/api/admin/moments/backfill', {
+      method: 'POST', body: JSON.stringify({ apply }),
+    }).catch(() => null);
+    setBackfillBusy(false);
+    if (!r?.ok) { setMsg(r?.message ?? 'Could not run that.'); return; }
+    setBackfill(r);
+    if (apply) load();
+  }
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -202,6 +217,44 @@ export default function AdminsPage() {
 
   return (
     <div className="space-y-6">
+      {profile?.accountType === 'ROOT_ADMIN' && (
+        <div className="rounded-xl border border-brand-ice-200 bg-white p-4 shadow-sm">
+          <h2 className="text-sm font-semibold text-brand-navy-900">Guest moments access for existing admins</h2>
+          <p className="mt-1 text-xs text-brand-navy-700/70">
+            Guest moments now has its own permissions. Admins who could use it before (through “Manage invites”) will lose the menu unless you run this once.
+            It lets them keep viewing, deleting and sharing on all current events. You can narrow each admin afterwards. Running it again never undoes your changes.
+          </p>
+          {backfill === null && (
+            <button type="button" disabled={backfillBusy} onClick={() => runBackfill(false)}
+              className="mt-3 rounded-md border border-brand-blue-500 px-3 py-1.5 text-sm font-medium text-brand-blue-600 hover:bg-brand-ice-50 disabled:opacity-50">
+              {backfillBusy ? 'Checking…' : 'Check who is affected'}
+            </button>
+          )}
+          {backfill && !backfill.applied && (
+            <div className="mt-3 space-y-2 text-sm text-brand-navy-800">
+              {backfill.updated.length === 0
+                ? <p>Nobody needs updating. You are all set.</p>
+                : <>
+                    <p>These {backfill.updated.length} admin{backfill.updated.length === 1 ? '' : 's'} would keep Guest moments on {backfill.eventCount} event{backfill.eventCount === 1 ? '' : 's'}:</p>
+                    <ul className="list-disc pl-5">{backfill.updated.map((u) => <li key={u.uid}>{u.name}</li>)}</ul>
+                    <div className="flex gap-2">
+                      <button type="button" disabled={backfillBusy} onClick={() => runBackfill(true)}
+                        className="rounded-md bg-brand-blue-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-blue-600 disabled:opacity-50">
+                        {backfillBusy ? 'Applying…' : 'Apply now'}
+                      </button>
+                      <button type="button" onClick={() => setBackfill(null)} className="rounded-md border border-brand-ice-200 px-3 py-1.5 text-sm text-brand-navy-700 hover:bg-brand-ice-50">Cancel</button>
+                    </div>
+                  </>}
+            </div>
+          )}
+          {backfill?.applied && (
+            <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800" role="status">
+              Done. {backfill.updated.length} admin{backfill.updated.length === 1 ? '' : 's'} updated.
+            </p>
+          )}
+        </div>
+      )}
+
       {can('canManageAdmins') && (
         <form onSubmit={create} className="rounded-xl border border-brand-ice-200 bg-white p-4 shadow-sm">
           <h2 className="mb-1 font-semibold text-brand-navy-900">Create administrator</h2>

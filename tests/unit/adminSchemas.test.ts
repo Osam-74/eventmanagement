@@ -11,6 +11,9 @@ describe('admin permission schemas (owner-reported bug, 2026-09-10)', () => {
       canManageInvites: false,
       canManageUshers: false,
       canViewAnalytics: false,
+      canViewMoments: false,
+      canDeleteMoments: false,
+      canShareMoments: false,
     });
   });
 

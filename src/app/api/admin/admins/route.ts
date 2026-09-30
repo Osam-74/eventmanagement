@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
 
   const parsed = createAdminSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'Invalid input' }, { status: 400 });
-  const { email, password, displayName, permissions } = parsed.data;
+  const { email, password, displayName, permissions, momentsEventIds } = parsed.data;
 
   const result = await createAdminAccount(db(), {
     actor: {
@@ -34,10 +34,12 @@ export async function POST(req: NextRequest) {
       displayName: res.admin.displayName,
       accountType: res.admin.accountType,
       permissions: res.admin.permissions,
+      momentsEventIds: res.admin.momentsEventIds,
     },
     email,
     displayName,
     permissions,
+    momentsEventIds,
     createAuthUser: async (em, dn) => {
       const user = await auth().createUser({ email: em, password, displayName: dn, emailVerified: true });
       return user.uid;

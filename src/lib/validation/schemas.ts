@@ -8,6 +8,9 @@ export const permissionSchema = z.object({
   canManageInvites: z.boolean().optional().default(false),
   canManageUshers: z.boolean().optional().default(false),
   canViewAnalytics: z.boolean().optional().default(false),
+  canViewMoments: z.boolean().optional().default(false),
+  canDeleteMoments: z.boolean().optional().default(false),
+  canShareMoments: z.boolean().optional().default(false),
 });
 
 /**
@@ -29,6 +32,9 @@ export const partialPermissionSchema = z.object({
   canManageInvites: z.boolean().optional(),
   canManageUshers: z.boolean().optional(),
   canViewAnalytics: z.boolean().optional(),
+  canViewMoments: z.boolean().optional(),
+  canDeleteMoments: z.boolean().optional(),
+  canShareMoments: z.boolean().optional(),
 });
 
 export const createEventSchema = z.object({
@@ -212,17 +218,21 @@ export const heartbeatSchema = z.object({
   gateId: z.string().max(40).optional().nullable(),
 });
 
+const momentsEventIdsSchema = z.array(z.string().min(1).max(128)).max(200);
+
 export const createAdminSchema = z.object({
   email: z.string().email(),
   password: z.string().min(10).max(100),
   displayName: z.string().min(2).max(80),
   permissions: permissionSchema,
+  momentsEventIds: momentsEventIdsSchema.optional(),
 });
 
 export const updateAdminSchema = z.object({
   active: z.boolean().optional(),
   displayName: z.string().min(2).max(80).optional(),
   permissions: partialPermissionSchema.optional(),
+  momentsEventIds: momentsEventIdsSchema.optional(),
 });
 
 // ---- Guest moments (photo/video uploads to Cloudflare R2), 2026-09-29 ----

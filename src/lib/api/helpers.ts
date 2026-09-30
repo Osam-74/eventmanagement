@@ -9,6 +9,7 @@ export type AdminContext = {
   accountType: 'ROOT_ADMIN' | 'ADMIN';
   permissions: Record<string, boolean>;
   displayName: string;
+  momentsEventIds: string[];
 };
 
 export function badRequest(message: string, code = 'SERVER_ERROR') {
@@ -68,6 +69,7 @@ export async function getAdminContext(req: NextRequest): Promise<AdminContext | 
     displayName: String(data.displayName ?? ''),
     accountType: data.accountType,
     permissions: (data.permissions as Record<string, boolean>) ?? {},
+    momentsEventIds: Array.isArray(data.momentsEventIds) ? (data.momentsEventIds as string[]) : [],
   };
 }
 
@@ -89,4 +91,29 @@ export function hasPermission(admin: AdminContext, permission: Permission): bool
 
 export function emptyPermissions(): Record<Permission, boolean> {
   return Object.fromEntries(ALL_PERMISSIONS.map((p) => [p, false])) as Record<Permission, boolean>;
+}
+
+/**
+ * Guest-moments access. Two independent gates, BOTH required:
+ *   1. the capability (view / delete / share), and
+ *   2. the specific event: the Root Admin may open any event, everyone else
+ *      only the events explicitly granted to them (default: none).
+ * Every moments endpoint that takes an eventId goes through this, so the UI
+ * hiding things is a convenience and never the only protection.
+ */
+export function canAccessMomentsEvent(admin: AdminContext, eventId: string): boolean {
+  if (admin.accountType === 'ROOT_ADMIN') return true;
+  return admin.momentsEventIds.includes(eventId);
+}
+
+export async function requireMomentsAccess(
+  req: NextRequest,
+  permission: 'canViewMoments' | 'canDeleteMoments' | 'canShareMoments',
+  eventId: string | null
+): Promise<{ admin: AdminContext } | { error: NextResponse }> {
+  const res = await requirePermission(req, permission);
+  if ('error' in res) return res;
+  if (!eventId) return { error: badRequest('eventId required') };
+  if (!canAccessMomentsEvent(res.admin, eventId)) return { error: forbidden('You do not have access to this event\'s moments.') };
+  return res;
 }

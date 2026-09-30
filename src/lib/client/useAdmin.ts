@@ -9,6 +9,7 @@ export type AdminProfile = {
   displayName: string;
   accountType: 'ROOT_ADMIN' | 'ADMIN';
   permissions: Record<string, boolean>;
+  momentsEventIds?: string[];
 } | null;
 
 /**

@@ -9,6 +9,8 @@ export type AdminActor = {
   displayName: string;
   accountType: 'ROOT_ADMIN' | 'ADMIN';
   permissions: Record<string, boolean>;
+  /** Events this admin may open in Guest moments (Root Admin: all, ignores this). */
+  momentsEventIds?: string[];
 };
 
 export type AdminServiceResult =
@@ -40,6 +42,31 @@ export function grantablePermissions(
 }
 
 /**
+ * Which events' moments an actor may open. Root Admin: every event (null =
+ * unrestricted). Anyone else: exactly their granted list (default none).
+ */
+export function accessibleMomentEvents(
+  actor: Pick<AdminActor, 'accountType' | 'momentsEventIds'>
+): string[] | null {
+  if (actor.accountType === 'ROOT_ADMIN') return null;
+  return Array.isArray(actor.momentsEventIds) ? actor.momentsEventIds : [];
+}
+
+/**
+ * Anti-escalation for event access: an actor can only hand out access to
+ * events they can access themselves (Root Admin: any). Deduplicated; events
+ * the actor cannot see are silently dropped, like ungrantable permissions.
+ */
+export function grantableMomentEvents(
+  actor: Pick<AdminActor, 'accountType' | 'momentsEventIds'>,
+  requested: string[] | undefined
+): string[] {
+  const want = Array.from(new Set(requested ?? []));
+  const mine = accessibleMomentEvents(actor);
+  return mine === null ? want : want.filter((id) => mine.includes(id));
+}
+
+/**
  * Creates a REGULAR administrator. There is deliberately no parameter for
  * accountType — nobody can create another Root Admin through any API; the
  * single Root Admin is bootstrapped offline by the owner.
@@ -54,11 +81,13 @@ export async function createAdminAccount(
     email: string;
     displayName: string;
     permissions: Record<string, boolean>;
+    momentsEventIds?: string[];
     createAuthUser: (email: string, displayName: string) => Promise<string>;
     setAdminClaim?: (uid: string) => Promise<void>;
   }
 ): Promise<AdminServiceResult & { uid?: string }> {
   const { actor, email, displayName, permissions, createAuthUser, setAdminClaim } = input;
+  const momentsEventIds = grantableMomentEvents(actor, input.momentsEventIds);
 
   if (!actorHasPermission(actor, 'canManageAdmins')) {
     return { ok: false, code: 'FORBIDDEN', message: 'Missing permission: canManageAdmins' };
@@ -79,6 +108,7 @@ export async function createAdminAccount(
     accountType: 'ADMIN', // never ROOT_ADMIN via API
     active: true,
     permissions: granted,
+    momentsEventIds,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
     createdBy: actor.uid,
@@ -90,7 +120,7 @@ export async function createAdminAccount(
     action: 'ADMIN_CREATED',
     actor: actor.uid,
     actorType: 'admin',
-    detail: { newAdminUid: uid, email, permissions: granted },
+    detail: { newAdminUid: uid, email, permissions: granted, momentsEventIds },
     at: FieldValue.serverTimestamp(),
   });
 
@@ -109,6 +139,7 @@ export async function updateAdminAccount(
     active?: boolean;
     displayName?: string;
     permissions?: Record<string, boolean>;
+    momentsEventIds?: string[];
   }
 ): Promise<AdminServiceResult> {
   const { actor, targetUid, active, displayName, permissions } = input;
@@ -147,6 +178,16 @@ export async function updateAdminAccount(
     update.permissions = merged;
   }
 
+  if (input.momentsEventIds) {
+    // Replace the target's event list, but never let the actor grant events
+    // they cannot access, and never strip events they cannot see from the
+    // target: keep those the actor has no visibility of, replace the rest.
+    const before = Array.isArray(target.momentsEventIds) ? (target.momentsEventIds as string[]) : [];
+    const mine = accessibleMomentEvents(actor);
+    const invisibleToActor = mine === null ? [] : before.filter((id) => !mine.includes(id));
+    update.momentsEventIds = Array.from(new Set([...invisibleToActor, ...grantableMomentEvents(actor, input.momentsEventIds)]));
+  }
+
   await firestore.collection('users').doc(targetUid).update(update);
 
   // strip undefined values — Firestore rejects undefined field values
@@ -154,6 +195,7 @@ export async function updateAdminAccount(
   if (typeof active === 'boolean') detail.active = active;
   if (displayName) detail.displayName = displayName;
   if (update.permissions) detail.permissions = update.permissions;
+  if (update.momentsEventIds) detail.momentsEventIds = update.momentsEventIds;
 
   await firestore.collection('auditLogs').add({
     action: active === false ? 'ADMIN_DISABLED' : 'ADMIN_UPDATED',
@@ -206,4 +248,40 @@ export async function deleteAdminAccount(
   });
 
   return { ok: true };
+}
+
+/**
+ * One-time backfill for the move of Guest moments off `canManageInvites` and
+ * onto its own permissions. Every existing ADMIN who could use the feature
+ * before (canManageInvites) keeps exactly that ability: they get view + share
+ * (+ delete, as they could delete before) and access to every current event.
+ * Nobody loses access silently; the owner narrows it afterwards from the
+ * Admins page. Idempotent: an admin who already has canViewMoments is skipped,
+ * so re-running never overrides a choice the owner made.
+ */
+export async function backfillMomentsAccess(
+  firestore: Firestore,
+  opts: { dryRun: boolean }
+): Promise<{ updated: string[]; skipped: string[]; eventCount: number }> {
+  const events = await firestore.collection('events').get();
+  const eventIds = events.docs.filter((d) => d.data().deleted !== true).map((d) => d.id);
+  const users = await firestore.collection('users').get();
+  const updated: string[] = [];
+  const skipped: string[] = [];
+  for (const u of users.docs) {
+    const d = u.data();
+    if (d.accountType !== 'ADMIN') { skipped.push(u.id); continue; } // root already sees everything
+    const perms = (d.permissions ?? {}) as Record<string, boolean>;
+    if (perms.canViewMoments !== undefined || !perms.canManageInvites) { skipped.push(u.id); continue; }
+    updated.push(u.id);
+    if (opts.dryRun) continue;
+    await u.ref.update({
+      'permissions.canViewMoments': true,
+      'permissions.canDeleteMoments': true,
+      'permissions.canShareMoments': true,
+      momentsEventIds: eventIds,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  }
+  return { updated, skipped, eventCount: eventIds.length };
 }

@@ -4,7 +4,10 @@ export type Permission =
   | 'canGenerateInvites'
   | 'canManageInvites'
   | 'canManageUshers'
-  | 'canViewAnalytics';
+  | 'canViewAnalytics'
+  | 'canViewMoments'
+  | 'canDeleteMoments'
+  | 'canShareMoments';
 
 export const ALL_PERMISSIONS: Permission[] = [
   'canManageAdmins',
@@ -13,6 +16,9 @@ export const ALL_PERMISSIONS: Permission[] = [
   'canManageInvites',
   'canManageUshers',
   'canViewAnalytics',
+  'canViewMoments',
+  'canDeleteMoments',
+  'canShareMoments',
 ];
 
 export type AdminUser = {
@@ -22,6 +28,8 @@ export type AdminUser = {
   accountType: 'ROOT_ADMIN' | 'ADMIN';
   active: boolean;
   permissions: Record<Permission, boolean>;
+  /** Events whose guest moments this admin may open. Root admin: all. Empty/absent: none. */
+  momentsEventIds?: string[];
   createdAt: Date;
 };
 

@@ -14,7 +14,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ uid: stri
 
   const parsed = updateAdminSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ ok: false, message: 'Invalid input' }, { status: 400 });
-  const { active, displayName, permissions } = parsed.data;
+  const { active, displayName, permissions, momentsEventIds } = parsed.data;
 
   const result = await updateAdminAccount(db(), {
     actor: {
@@ -23,11 +23,13 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ uid: stri
       displayName: res.admin.displayName,
       accountType: res.admin.accountType,
       permissions: res.admin.permissions,
+      momentsEventIds: res.admin.momentsEventIds,
     },
     targetUid: uid,
     active,
     displayName,
     permissions,
+    momentsEventIds,
   });
 
   if (!result.ok) {

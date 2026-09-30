@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import archiver from 'archiver';
 import { PassThrough, Readable } from 'stream';
 import { db } from '@/lib/firebase/admin';
-import { requirePermission } from '@/lib/api/helpers';
+import { requireMomentsAccess } from '@/lib/api/helpers';
 import { getAllReadyMoments, getMomentsByIds } from '@/lib/services/moments';
 import { getObjectStream } from '@/lib/moments/r2';
 import { uniqueZipNames } from '@/lib/moments/rules';
@@ -22,15 +22,15 @@ export const maxDuration = 300;
  * compressed, so entries are STORED (no re-deflate): faster, less CPU.
  */
 export async function POST(req: NextRequest) {
-  const res = await requirePermission(req, 'canManageInvites');
-  if ('error' in res) return res.error;
   const eventId = req.nextUrl.searchParams.get('eventId');
+  const res = await requireMomentsAccess(req, 'canViewMoments', eventId);
+  if ('error' in res) return res.error;
   if (!eventId) return NextResponse.json({ ok: false, message: 'eventId required' }, { status: 400 });
 
   const all = req.nextUrl.searchParams.get('all') === '1';
   let items;
   if (all) {
-    items = await getAllReadyMoments(db(), eventId);
+    items = await getAllReadyMoments(db(), eventId, req.nextUrl.searchParams.get('guest'));
   } else {
     const parsed = momentsIdsSchema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) return NextResponse.json({ ok: false, message: 'Select at least one item.' }, { status: 400 });

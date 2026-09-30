@@ -186,9 +186,39 @@ export type MomentDTO = {
 
 export async function listMoments(
   firestore: Firestore,
-  input: { eventId: string; limit: number; after?: string | null }
+  input: { eventId: string; limit: number; after?: string | null; guestId?: string | null }
 ): Promise<{ items: MomentDTO[]; nextCursor: string | null; total: number }> {
   const base = firestore.collection('moments').where('eventId', '==', input.eventId).where('status', '==', 'ready');
+
+  // Folder view (one guest's files). Filtering by guest in the query would
+  // need an extra composite Firestore index that has to be deployed
+  // separately; a missing index would break the page in production. Instead
+  // read the event's already-indexed feed in pages and filter in code. Per-guest
+  // caps keep an event small enough for this to be cheap.
+  if (input.guestId) {
+    const all: { id: string; m: Omit<MomentDoc, 'createdAt' | 'completedAt'> & { completedAt?: FirebaseFirestore.Timestamp } }[] = [];
+    let cursor: FirebaseFirestore.QueryDocumentSnapshot | null = null;
+    for (;;) {
+      let q = base.orderBy('completedAt', 'desc').limit(500);
+      if (cursor) q = q.startAfter(cursor);
+      const snap = await q.get();
+      for (const d of snap.docs) {
+        const m = d.data() as (typeof all)[number]['m'];
+        if (m.guestId === input.guestId) all.push({ id: d.id, m });
+      }
+      if (snap.docs.length < 500) break;
+      cursor = snap.docs[snap.docs.length - 1];
+    }
+    let start = 0;
+    if (input.after) { const i = all.findIndex((x) => x.id === input.after); if (i >= 0) start = i + 1; }
+    const page = all.slice(start, start + input.limit);
+    return {
+      items: page.map(({ id, m }) => toDTO(id, m)),
+      nextCursor: start + input.limit < all.length ? page[page.length - 1].id : null,
+      total: all.length,
+    };
+  }
+
   const total = (await base.count().get()).data().count;
   let q = base.orderBy('completedAt', 'desc').limit(input.limit + 1);
   if (input.after) {
@@ -197,14 +227,50 @@ export async function listMoments(
   }
   const snap = await q.get();
   const docs = snap.docs.slice(0, input.limit);
-  const items = docs.map((d) => {
-    const m = d.data() as Omit<MomentDoc, 'createdAt' | 'completedAt'> & { completedAt?: FirebaseFirestore.Timestamp };
-    return {
-      id: d.id, kind: m.kind, name: m.originalName, size: m.size ?? 0, contentType: m.contentType,
-      createdAt: m.completedAt?.toDate?.().toISOString() ?? null, guestId: m.guestId,
-    };
-  });
+  const items = docs.map((d) => toDTO(d.id, d.data() as Omit<MomentDoc, 'createdAt' | 'completedAt'> & { completedAt?: FirebaseFirestore.Timestamp }));
   return { items, nextCursor: snap.docs.length > input.limit ? docs[docs.length - 1].id : null, total };
+}
+
+function toDTO(id: string, m: Omit<MomentDoc, 'createdAt' | 'completedAt'> & { completedAt?: FirebaseFirestore.Timestamp }): MomentDTO {
+  return {
+    id, kind: m.kind, name: m.originalName, size: m.size ?? 0, contentType: m.contentType,
+    createdAt: m.completedAt?.toDate?.().toISOString() ?? null, guestId: m.guestId,
+  };
+}
+
+export type GuestFolder = { guestId: string; label: string; count: number; photos: number; videos: number; bytes: number; lastAt: string | null };
+
+/**
+ * One folder per guest. Labels are "Guest 1, Guest 2…" in order of each
+ * guest's FIRST upload, so a folder keeps its number as more arrive. The
+ * real guest id is anonymous; nothing about the person is stored or shown.
+ */
+export async function listGuestFolders(firestore: Firestore, eventId: string): Promise<{ folders: GuestFolder[]; total: number }> {
+  const base = firestore.collection('moments').where('eventId', '==', eventId).where('status', '==', 'ready');
+  const acc = new Map<string, { count: number; photos: number; videos: number; bytes: number; first: number; last: number }>();
+  let cursor: FirebaseFirestore.QueryDocumentSnapshot | null = null;
+  for (;;) {
+    let q = base.orderBy('completedAt', 'asc').limit(500);
+    if (cursor) q = q.startAfter(cursor);
+    const snap = await q.get();
+    for (const d of snap.docs) {
+      const m = d.data() as { guestId: string; kind: 'photo' | 'video'; size?: number | null; completedAt?: FirebaseFirestore.Timestamp };
+      const t = m.completedAt?.toMillis?.() ?? 0;
+      const g = acc.get(m.guestId) ?? { count: 0, photos: 0, videos: 0, bytes: 0, first: t, last: t };
+      g.count++; if (m.kind === 'video') g.videos++; else g.photos++;
+      g.bytes += m.size ?? 0; g.first = Math.min(g.first, t); g.last = Math.max(g.last, t);
+      acc.set(m.guestId, g);
+    }
+    if (snap.docs.length < 500) break;
+    cursor = snap.docs[snap.docs.length - 1];
+  }
+  const folders = [...acc.entries()]
+    .sort((a, b) => a[1].first - b[1].first)
+    .map(([guestId, g], i) => ({
+      guestId, label: `Guest ${i + 1}`, count: g.count, photos: g.photos, videos: g.videos, bytes: g.bytes,
+      lastAt: g.last ? new Date(g.last).toISOString() : null,
+    }));
+  return { folders, total: folders.reduce((n, f) => n + f.count, 0) };
 }
 
 export async function getMomentsByIds(firestore: Firestore, eventId: string, ids: string[]) {
@@ -222,7 +288,7 @@ export async function getMomentsByIds(firestore: Firestore, eventId: string, ids
   return out;
 }
 
-export async function getAllReadyMoments(firestore: Firestore, eventId: string) {
+export async function getAllReadyMoments(firestore: Firestore, eventId: string, guestId?: string | null) {
   const out: { id: string; key: string; name: string; kind: 'photo' | 'video'; contentType: string }[] = [];
   let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
   for (;;) {
@@ -231,6 +297,7 @@ export async function getAllReadyMoments(firestore: Firestore, eventId: string) 
     const snap = await q.get();
     for (const d of snap.docs) {
       const m = d.data() as MomentDoc;
+      if (guestId && m.guestId !== guestId) continue; // one guest's folder only
       out.push({ id: d.id, key: m.key, name: m.originalName, kind: m.kind, contentType: m.contentType });
     }
     if (snap.docs.length < 500) break;

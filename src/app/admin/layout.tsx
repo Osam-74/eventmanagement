@@ -19,17 +19,22 @@ import {
 
 type EventItem = { id: string; name: string; slug: string; scanningEnabled?: boolean };
 
-const NAV = [
+// `perm` (when set) hides the item from admins who lack it. Hiding is a
+// convenience only: every API route enforces the same permission server-side.
+// Entries without `perm` keep their previous behaviour (visible to all).
+const NAV: { href: string; label: string; perm?: string }[] = [
   { href: '/admin', label: 'Dashboard' },
   { href: '/admin/events', label: 'Events' },
   { href: '/admin/templates', label: 'Templates' },
   { href: '/admin/generate', label: 'Generate' },
   { href: '/admin/invitations', label: 'Invitations' },
-  { href: '/admin/moments', label: 'Guest moments' },
+  { href: '/admin/moments', label: 'Guest moments', perm: 'canViewMoments' },
   { href: '/admin/ushers', label: 'Ushers' },
   { href: '/admin/admins', label: 'Admins' },
   { href: '/admin/logs', label: 'Scan logs' },
 ];
+
+type MomentEventNav = { id: string; name: string; count: number };
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -42,6 +47,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [confirm, setConfirm] = useState<'enable' | 'disable' | null>(null);
   const [scanningBusy, setScanningBusy] = useState(false);
+  const [momentEvents, setMomentEvents] = useState<MomentEventNav[]>([]);
 
   // ONE session fetch for the whole admin area (pages share it via context).
   const resolveSession = useCallback(() => {
@@ -83,6 +89,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       })
       .catch(() => undefined);
   }, [status, pathname]);
+
+  // Sidebar submenu for Guest moments: ONLY the events this admin may open
+  // (server-filtered). Skipped entirely for admins without the permission.
+  const canSeeMoments = profile?.accountType === 'ROOT_ADMIN' || Boolean(profile?.permissions?.canViewMoments);
+  useEffect(() => {
+    if (status !== 'authorized' || !canSeeMoments) { setMomentEvents([]); return; }
+    adminJson<{ ok: boolean; events: MomentEventNav[] }>('/api/admin/moments/events')
+      .then((r) => setMomentEvents(r.ok ? r.events : []))
+      .catch(() => setMomentEvents([]));
+  }, [status, canSeeMoments, pathname]);
 
   // Close the mobile drawer on every navigation.
   useEffect(() => {
@@ -134,24 +150,42 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const can = (p: string) =>
     profile?.accountType === 'ROOT_ADMIN' || Boolean(profile?.permissions?.[p]);
 
-  const currentLabel = NAV.find((n) => n.href === pathname)?.label ?? 'Dashboard';
+  const currentLabel = NAV.find((n) => n.href === pathname || (n.href !== '/admin' && pathname.startsWith(`${n.href}/`)))?.label ?? 'Dashboard';
+
+  const itemCls = (active: boolean) =>
+    `rounded-lg px-3 py-2 text-sm font-medium transition ${
+      active ? 'bg-brand-blue-500 text-white shadow-sm' : 'text-brand-ice-200/80 hover:bg-white/5 hover:text-white'
+    }`;
 
   const navList = (
-    <nav className="flex flex-1 flex-col gap-0.5 px-3">
-      {NAV.map((n) => {
-        const active = pathname === n.href;
+    <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3">
+      {NAV.filter((n) => !n.perm || can(n.perm)).map((n) => {
+        const isMoments = n.href === '/admin/moments';
+        const inMoments = pathname === n.href || pathname.startsWith(`${n.href}/`);
+        const active = isMoments ? pathname === n.href : pathname === n.href;
         return (
-          <Link
-            key={n.href}
-            href={n.href}
-            className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
-              active
-                ? 'bg-brand-blue-500 text-white shadow-sm'
-                : 'text-brand-ice-200/80 hover:bg-white/5 hover:text-white'
-            }`}
-          >
-            {n.label}
-          </Link>
+          <div key={n.href} className="flex flex-col gap-0.5">
+            <Link href={n.href} className={itemCls(isMoments ? active : active)}>
+              {n.label}
+            </Link>
+            {isMoments && inMoments && (
+              <div className="ml-3 flex flex-col gap-0.5 border-l border-white/10 pl-2">
+                {momentEvents.length === 0 ? (
+                  <span className="px-3 py-1.5 text-xs text-brand-ice-200/50">No events available</span>
+                ) : momentEvents.map((e) => {
+                  const href = `/admin/moments/${e.id}`;
+                  const on = pathname === href || pathname.startsWith(`${href}/`);
+                  return (
+                    <Link key={e.id} href={href} title={e.name}
+                      className={`flex items-center justify-between gap-2 rounded-md px-3 py-1.5 text-xs transition ${on ? 'bg-white/10 text-white' : 'text-brand-ice-200/70 hover:bg-white/5 hover:text-white'}`}>
+                      <span className="truncate">{e.name}</span>
+                      <span className="shrink-0 text-[10px] text-brand-ice-200/50">{e.count}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         );
       })}
     </nav>

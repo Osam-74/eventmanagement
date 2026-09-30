@@ -5,6 +5,7 @@ import { sendPasswordResetEmail } from 'firebase/auth';
 import { adminJson } from '@/lib/client/api';
 import { getFirebaseAuth } from '@/lib/firebase/client';
 import { useAdmin } from '@/lib/client/useAdmin';
+import { MomentsAccessPicker } from '@/components/MomentsAccessPicker';
 
 type AdminItem = {
   uid: string;
@@ -13,6 +14,7 @@ type AdminItem = {
   accountType: 'ROOT_ADMIN' | 'ADMIN';
   active: boolean;
   permissions: Record<string, boolean>;
+  momentsEventIds?: string[];
 };
 
 const PERMS = [
@@ -22,7 +24,18 @@ const PERMS = [
   'canManageInvites',
   'canManageUshers',
   'canViewAnalytics',
+  'canViewMoments',
+  'canDeleteMoments',
+  'canShareMoments',
 ] as const;
+
+// Friendly names; the moments trio reads as one group.
+const PERM_LABEL: Record<string, string> = {
+  canViewMoments: 'View moments',
+  canDeleteMoments: 'Delete moments',
+  canShareMoments: 'Moments link & QR',
+};
+const permLabel = (p: string) => PERM_LABEL[p] ?? p.replace('can', '').replace('Manage', '');
 
 export default function AdminsPage() {
   const { can, profile } = useAdmin();
@@ -31,6 +44,10 @@ export default function AdminsPage() {
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [perms, setPerms] = useState<Record<string, boolean>>({});
+  const [momentEvents, setMomentEvents] = useState<string[]>([]);
+  const [grantable, setGrantable] = useState<{ id: string; name: string }[]>([]);
+  const [editEventsUid, setEditEventsUid] = useState<string | null>(null);
+  const [editEvents, setEditEvents] = useState<string[]>([]);
   const [msg, setMsg] = useState('');
   const [resetUid, setResetUid] = useState<string | null>(null); // which admin's reset is in flight
   const [resetSentUid, setResetSentUid] = useState<string | null>(null); // last one that succeeded
@@ -39,16 +56,22 @@ export default function AdminsPage() {
     adminJson<{ ok: boolean; admins: AdminItem[] }>('/api/admin/admins').then((r) => setAdmins(r.admins ?? []));
   }, []);
   useEffect(() => { load(); }, [load]);
+  // Only events THIS admin can access can be handed on (server enforces it too).
+  useEffect(() => {
+    adminJson<{ ok: boolean; events: { id: string; name: string }[] }>('/api/admin/moments/events')
+      .then((r) => setGrantable(r.ok ? r.events.map((e) => ({ id: e.id, name: e.name })) : []))
+      .catch(() => setGrantable([]));
+  }, []);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
     setMsg('');
     const r = await adminJson<{ ok: boolean; message?: string }>('/api/admin/admins', {
       method: 'POST',
-      body: JSON.stringify({ email, password, displayName, permissions: perms }),
+      body: JSON.stringify({ email, password, displayName, permissions: perms, momentsEventIds: momentEvents }),
     }).catch(() => null);
     if (r?.ok) {
-      setEmail(''); setDisplayName(''); setPassword(''); setPerms({});
+      setEmail(''); setDisplayName(''); setPassword(''); setPerms({}); setMomentEvents([]);
       setMsg('Administrator created.');
       load();
     } else {
@@ -114,12 +137,35 @@ export default function AdminsPage() {
                   onChange={(e) => patch(a.uid, { permissions: { [p]: e.target.checked } })}
                   className="accent-brand-blue-500"
                 />
-                {p.replace('can', '').replace('Manage', '')}
+                {permLabel(p)}
               </label>
             ))
           : PERMS.filter((p) => a.permissions?.[p]).map((p) => (
-              <span key={p} className="rounded bg-brand-ice-100 px-2 py-0.5 text-xs text-brand-navy-700">{p}</span>
+              <span key={p} className="rounded bg-brand-ice-100 px-2 py-0.5 text-xs text-brand-navy-700">{permLabel(p)}</span>
             ))}
+        {a.accountType !== 'ROOT_ADMIN' && a.permissions?.canViewMoments && (
+          <div className="basis-full">
+            {editEventsUid === a.uid ? (
+              <div className="mt-1 space-y-2">
+                <MomentsAccessPicker options={grantable} value={editEvents} onChange={setEditEvents} />
+                <div className="flex gap-2">
+                  <button type="button" onClick={async () => { await patch(a.uid, { momentsEventIds: editEvents }); setEditEventsUid(null); }}
+                    className="rounded-md bg-brand-blue-500 px-3 py-1 text-xs font-medium text-white hover:bg-brand-blue-600">Save events</button>
+                  <button type="button" onClick={() => setEditEventsUid(null)}
+                    className="rounded-md border border-brand-ice-200 px-3 py-1 text-xs text-brand-navy-700 hover:bg-brand-ice-50">Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-0.5 text-xs text-brand-navy-700/70">
+                Moments events: {(a.momentsEventIds?.length ?? 0) === 0 ? <span className="text-amber-700">none yet</span> : `${a.momentsEventIds!.length} event${a.momentsEventIds!.length === 1 ? '' : 's'}`}
+                {can('canManageAdmins') && (
+                  <button type="button" onClick={() => { setEditEventsUid(a.uid); setEditEvents(a.momentsEventIds ?? []); }}
+                    className="ml-2 text-brand-blue-600 hover:underline">Edit</button>
+                )}
+              </p>
+            )}
+          </div>
+        )}
       </div>
     );
   }
@@ -178,10 +224,13 @@ export default function AdminsPage() {
                   onChange={(e) => setPerms({ ...perms, [p]: e.target.checked })}
                   className="accent-brand-blue-500"
                 />
-                {p}
+                {permLabel(p)}
               </label>
             ))}
           </div>
+          {perms.canViewMoments && (
+            <div className="mt-3"><MomentsAccessPicker options={grantable} value={momentEvents} onChange={setMomentEvents} /></div>
+          )}
           {msg && <p className="mt-2 text-sm text-brand-navy-700">{msg}</p>}
           <button className="mt-3 rounded-lg bg-brand-blue-500 px-4 py-2 font-medium text-white hover:bg-brand-blue-600">Create</button>
         </form>

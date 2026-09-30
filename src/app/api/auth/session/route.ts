@@ -52,6 +52,7 @@ export async function POST(req: NextRequest) {
       displayName: String(data.displayName ?? ''),
       accountType: data.accountType,
       permissions: (data.permissions as Record<string, boolean>) ?? {},
+      momentsEventIds: Array.isArray(data.momentsEventIds) ? data.momentsEventIds : [],
     },
   });
   res.cookies.set(ADMIN_SESSION_COOKIE, createAdminSessionToken(decoded.uid), {

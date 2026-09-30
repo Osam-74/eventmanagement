@@ -220,10 +220,6 @@ export default function AdminsPage() {
       {profile?.accountType === 'ROOT_ADMIN' && (
         <div className="rounded-xl border border-brand-ice-200 bg-white p-4 shadow-sm">
           <h2 className="text-sm font-semibold text-brand-navy-900">Guest moments access for existing admins</h2>
-          <p className="mt-1 text-xs text-brand-navy-700/70">
-            Guest moments now has its own permissions. Admins who could use it before (through “Manage invites”) will lose the menu unless you run this once.
-            It lets them keep viewing, deleting and sharing on all current events. You can narrow each admin afterwards. Running it again never undoes your changes.
-          </p>
           {backfill === null && (
             <button type="button" disabled={backfillBusy} onClick={() => runBackfill(false)}
               className="mt-3 rounded-md border border-brand-blue-500 px-3 py-1.5 text-sm font-medium text-brand-blue-600 hover:bg-brand-ice-50 disabled:opacity-50">

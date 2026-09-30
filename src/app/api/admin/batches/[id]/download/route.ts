@@ -10,9 +10,10 @@ export const maxDuration = 300;
 
 /**
  * Streams a ZIP of all completed invitation cards for a batch.
- * Storage objects are appended as read streams so the ZIP can start flowing
- * to the browser immediately instead of downloading every image into memory
- * one-by-one before each archive entry can be produced.
+ * Invitation images are already JPEG-compressed, so store them without
+ * another deflate pass. This reduces CPU time and lets bytes start flowing
+ * to the browser sooner. Storage objects are appended as read streams to
+ * keep memory usage bounded even for HQ batches.
  */
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     .limit(200)
     .get();
 
-  const archive = archiver('zip', { zlib: { level: 6 } });
+  const archive = archiver('zip', { store: true });
   const pass = new PassThrough();
   archive.pipe(pass);
 

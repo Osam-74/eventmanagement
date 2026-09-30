@@ -91,23 +91,6 @@ function ScansIcon() {
     </svg>
   );
 }
-function ViewIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON_BASE}>
-      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  );
-}
-function DownloadIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON_BASE}>
-      <path d="M12 3v12" />
-      <path d="m7 10 5 5 5-5" />
-      <path d="M5 21h14" />
-    </svg>
-  );
-}
 function MoreIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" className={ICON_BASE} aria-hidden="true">
@@ -467,19 +450,15 @@ export default function InvitationsPage() {
                     <div className="flex justify-end gap-1.5">
                       <button
                         onClick={() => viewCard(inv)}
-                        title="View card"
-                        aria-label="View card"
-                        className="rounded-md border border-brand-ice-200 p-1.5 text-brand-navy-700 hover:bg-brand-ice-50"
+                        className="rounded-md border border-brand-ice-200 px-3 py-1.5 text-xs font-medium text-brand-navy-700 hover:bg-brand-ice-50"
                       >
-                        <ViewIcon />
+                        View
                       </button>
                       <button
                         onClick={() => downloadCard(inv)}
-                        title="Download card"
-                        aria-label={`Download ${inv.serialNumber}`}
-                        className="rounded-md border border-brand-ice-200 p-1.5 text-brand-navy-700 hover:bg-brand-ice-50"
+                        className="rounded-md border border-brand-blue-500 px-3 py-1.5 text-xs font-medium text-brand-blue-700 hover:bg-brand-blue-50"
                       >
-                        <DownloadIcon />
+                        Download
                       </button>
                       <div className="relative">
                         <button

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { adminFetch, adminJson } from '@/lib/client/api';
 import { useAdmin, useSelectedEvent } from '@/lib/client/useAdmin';
 
@@ -61,6 +61,8 @@ export default function GeneratePage() {
   const [batchError, setBatchError] = useState('');
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState('');
+  const [batchPage, setBatchPage] = useState(1);
+  const [batchesPerPage, setBatchesPerPage] = useState(10);
 
   const loadBatches = useCallback(async () => {
     if (!eventId) return;
@@ -73,6 +75,16 @@ export default function GeneratePage() {
   }, [eventId]);
 
   useEffect(() => { loadBatches(); }, [loadBatches]);
+
+  const totalBatchPages = Math.max(1, Math.ceil(batches.length / batchesPerPage));
+  const pagedBatches = useMemo(() => {
+    const start = (batchPage - 1) * batchesPerPage;
+    return batches.slice(start, start + batchesPerPage);
+  }, [batches, batchPage, batchesPerPage]);
+
+  useEffect(() => {
+    if (batchPage > totalBatchPages) setBatchPage(totalBatchPages);
+  }, [batchPage, totalBatchPages]);
 
   function selectCardType(next: CardType) {
     setCardType(next);
@@ -107,6 +119,7 @@ export default function GeneratePage() {
     }).catch(() => null);
     setResult(r ?? { ok: false, message: 'Generation failed.' });
     setBusy(false);
+    setBatchPage(1);
     loadBatches();
   }
 
@@ -258,7 +271,25 @@ export default function GeneratePage() {
       )}
 
       <div className="overflow-hidden rounded-xl border border-brand-ice-200 bg-white shadow-sm">
-        <h2 className="border-b border-brand-ice-200 bg-brand-ice-50 px-4 py-3 font-semibold text-brand-navy-900">Batches</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-brand-ice-200 bg-brand-ice-50 px-4 py-3">
+          <h2 className="font-semibold text-brand-navy-900">Batches</h2>
+          <label className="flex items-center gap-2 text-xs font-medium text-brand-navy-700/70">
+            Rows per page
+            <select
+              value={batchesPerPage}
+              onChange={(e) => {
+                setBatchesPerPage(Number(e.target.value));
+                setBatchPage(1);
+              }}
+              className="rounded-md border border-brand-ice-200 bg-white px-2 py-1 text-sm text-brand-navy-900 outline-none focus:border-brand-blue-500"
+            >
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+            </select>
+          </label>
+        </div>
         {batchError && (
           <p className="mx-4 mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
             {linkify(batchError)} <button onClick={loadBatches} className="underline">Retry</button>
@@ -279,7 +310,7 @@ export default function GeneratePage() {
               </tr>
             </thead>
             <tbody>
-              {batches.map((b) => {
+              {pagedBatches.map((b) => {
                 const type = resolveCardType(b);
                 const downloading = downloadingId === b.id;
                 const unavailable = b.completedQuantity === 0;
@@ -328,6 +359,32 @@ export default function GeneratePage() {
             </tbody>
           </table>
         </div>
+        {batches.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-brand-ice-200 px-4 py-3 text-sm text-brand-navy-700/70">
+            <span>
+              Showing {(batchPage - 1) * batchesPerPage + 1}–{Math.min(batchPage * batchesPerPage, batches.length)} of {batches.length}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={batchPage === 1}
+                onClick={() => setBatchPage((page) => Math.max(1, page - 1))}
+                className="rounded-md border border-brand-ice-200 px-3 py-1.5 hover:bg-brand-ice-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <span className="min-w-[92px] text-center">Page {batchPage} of {totalBatchPages}</span>
+              <button
+                type="button"
+                disabled={batchPage === totalBatchPages}
+                onClick={() => setBatchPage((page) => Math.min(totalBatchPages, page + 1))}
+                className="rounded-md border border-brand-ice-200 px-3 py-1.5 hover:bg-brand-ice-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

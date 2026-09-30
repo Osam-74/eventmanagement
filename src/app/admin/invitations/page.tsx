@@ -103,6 +103,15 @@ function ViewIcon() {
     </svg>
   );
 }
+function DownloadIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON_BASE}>
+      <path d="M12 3v12" />
+      <path d="m7 10 5 5 5-5" />
+      <path d="M5 21h14" />
+    </svg>
+  );
+}
 function DeleteIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON_BASE}>
@@ -218,9 +227,6 @@ export default function InvitationsPage() {
     setTagValue(inv.tag ?? '');
   }
 
-  // What the tag draft would do. Mirrors the server rules (max 24, only
-  // characters the card font can draw, printed uppercase) so a bad tag can't
-  // be submitted; the server re-validates regardless.
   function tagDraft(inv: Invitation): { changed: boolean; valid: boolean; next: string | null; note: string; tone: 'info' | 'good' | 'bad' } {
     const trimmed = tagValue.trim();
     const next = trimmed ? trimmed.toUpperCase() : null;
@@ -237,12 +243,8 @@ export default function InvitationsPage() {
     };
   }
 
-  // What the draft would do — drives the live preview AND gates Save, so an
-  // invalid edit (below the uses already consumed, empty, out of range) can
-  // never even be submitted. The server re-validates all of it regardless.
   function limitDraft(inv: Invitation): {
     valid: boolean;
-    /** true when the draft simply equals the current limit (nothing to send, nothing wrong). */
     unchanged?: boolean;
     next: number | null;
     note: string;
@@ -274,11 +276,8 @@ export default function InvitationsPage() {
     if (!limitFor) return;
     const d = limitDraft(limitFor);
     const t = tagDraft(limitFor);
-    // Only send what actually changed; each part is validated on its own.
     const limitChanged = d.valid;
     const tagChanged = t.changed && t.valid;
-    // A limit that is invalid (not merely unchanged) must block the save,
-    // never be silently skipped while the tag goes through.
     const limitBad = !d.valid && !d.unchanged;
     if ((!limitChanged && !tagChanged) || !t.valid || limitBad) return;
     setLimitSaving(true);
@@ -309,7 +308,6 @@ export default function InvitationsPage() {
       setLimitFor(null);
       load(skip);
     } else {
-      // Keep the dialog open so the reason is visible; refresh so anything that DID save is shown.
       setMsg(`${done.length ? `${label} ${done.join(' and ')}. ` : ''}${failed.join(' ')}`);
       if (done.length) load(skip);
     }
@@ -318,6 +316,10 @@ export default function InvitationsPage() {
   async function viewCard(inv: Invitation) {
     const r = await adminJson<{ ok: boolean; url?: string }>(`/api/admin/invitations/${inv.id}/image`);
     if (r?.url) window.open(r.url, '_blank');
+  }
+
+  function downloadCard(inv: Invitation) {
+    window.location.assign(`/api/admin/invitations/${inv.id}/image?download=1`);
   }
 
   function toggleSelect(id: string) {
@@ -520,6 +522,14 @@ export default function InvitationsPage() {
                         className="rounded-md border border-brand-ice-200 p-1.5 text-brand-navy-700 hover:bg-brand-ice-50"
                       >
                         <ViewIcon />
+                      </button>
+                      <button
+                        onClick={() => downloadCard(inv)}
+                        title="Download card"
+                        aria-label={`Download ${inv.serialNumber}`}
+                        className="rounded-md border border-brand-ice-200 p-1.5 text-brand-navy-700 hover:bg-brand-ice-50"
+                      >
+                        <DownloadIcon />
                       </button>
                       {can('canManageInvites') && (
                         <button

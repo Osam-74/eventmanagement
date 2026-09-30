@@ -26,6 +26,8 @@ export type AuditAction =
   | 'USHER_ENABLED'
   | 'ROOT_ADMIN_BOOTSTRAPPED'
   | 'MOMENTS_DELETED'
+  | 'MOMENTS_SLIDES_ADDED'
+  | 'MOMENTS_SLIDE_DELETED'
   | 'MOMENTS_EXPORTED';
 
 export async function writeAudit(action: AuditAction, actor: string, detail: Record<string, unknown>) {

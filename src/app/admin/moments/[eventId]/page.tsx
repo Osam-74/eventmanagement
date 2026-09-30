@@ -7,6 +7,7 @@ import { adminJson } from '@/lib/client/api';
 import { useAdmin } from '@/lib/client/useAdmin';
 import MomentsFileBrowser from '@/components/MomentsFileBrowser';
 import { GuestLinkPanel } from '@/components/GuestLinkPanel';
+import { SlideshowSettings } from '@/components/SlideshowSettings';
 
 type Folder = { guestId: string; label: string; count: number; photos: number; videos: number; bytes: number; lastAt: string | null };
 type EventInfo = { id: string; name: string; slug: string | null; eventDate: string | null; count: number; guestLink: string | null };
@@ -19,7 +20,8 @@ function EventMomentsInner() {
   const search = useSearchParams();
   const { can } = useAdmin();
   const guest = search.get('guest');
-  const tab = search.get('tab') === 'share' ? 'share' : 'files';
+  const tabParam = search.get('tab');
+  const tab = tabParam === 'share' ? 'share' : tabParam === 'settings' ? 'settings' : 'files';
 
   const [event, setEvent] = useState<EventInfo | null>(null);
   const [canShare, setCanShare] = useState(false);
@@ -91,7 +93,7 @@ function EventMomentsInner() {
 
       {!guest && (
         <div className="flex gap-1 border-b border-brand-ice-200" role="tablist">
-          {([['files', 'Folders'], ...(canShare ? [['share', 'Link & QR']] : [])] as [string, string][]).map(([k, label]) => (
+          {([['files', 'Folders'], ...(canShare ? [['share', 'Link & QR'], ['settings', 'Settings']] : [])] as [string, string][]).map(([k, label]) => (
             <button key={k} role="tab" aria-selected={tab === k}
               onClick={() => go({ tab: k === 'files' ? null : k })}
               className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${tab === k ? 'border-brand-blue-500 text-brand-blue-600' : 'border-transparent text-brand-navy-700/70 hover:text-brand-navy-900'}`}>
@@ -107,6 +109,9 @@ function EventMomentsInner() {
           ? <GuestLinkPanel link={event.guestLink} eventSlug={event.slug} copied={copied} setCopied={setCopied} />
           : <p className="text-sm text-brand-navy-700/60">Loading…</p>
       )}
+
+      {/* ---- Settings tab: guest-page slideshow (only with canShareMoments) ---- */}
+      {!guest && tab === 'settings' && canShare && <SlideshowSettings eventId={eventId} />}
 
       {/* ---- Folders tab ---- */}
       {!guest && tab === 'files' && (

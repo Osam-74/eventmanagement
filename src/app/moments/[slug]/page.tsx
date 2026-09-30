@@ -1,6 +1,7 @@
 'use client';
 
 import { use, useCallback, useEffect, useRef, useState } from 'react';
+import { GuestSlideshowBackground } from '@/components/GuestSlideshowBackground';
 import { CONCURRENCY, getGuestId, runPool, uploadOne, type Started } from '@/lib/client/momentsUpload';
 
 /**
@@ -27,6 +28,7 @@ export default function MomentsPage({ params }: { params: Promise<{ slug: string
   const [notice, setNotice] = useState<string | null>(null);
   const [event, setEvent] = useState<{ name: string } | null>(null);
   const [closed, setClosed] = useState<string | null>(null);
+  const [slides, setSlides] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const guestIdRef = useRef<string>('');
   const urlsRef = useRef<string[]>([]);
@@ -36,7 +38,7 @@ export default function MomentsPage({ params }: { params: Promise<{ slug: string
     fetch(`/api/moments/${encodeURIComponent(slug)}/info`)
       .then((r) => r.json())
       .then((b) => {
-        if (b.ok) { setEvent({ name: b.name }); if (!b.open) setClosed('Uploads are closed for this event.'); }
+        if (b.ok) { setEvent({ name: b.name }); setSlides(Array.isArray(b.slides) ? b.slides.map((x: { url: string }) => x.url) : []); if (!b.open) setClosed('Uploads are closed for this event.'); }
         else setClosed('This upload link is not valid.');
       })
       .catch(() => undefined);
@@ -95,19 +97,25 @@ export default function MomentsPage({ params }: { params: Promise<{ slug: string
   const done = items.filter((i) => i.status === 'done').length;
   const busy = items.some((i) => i.status === 'queued' || i.status === 'uploading');
 
+  const bg = slides.length > 0; // over photos: white text + frosted panels for legibility
+
   return (
+    <>
+    <GuestSlideshowBackground urls={slides} />
     <main className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col px-4 pb-10 pt-8">
-      {event && <p className="mb-4 text-center text-sm font-medium text-brand-navy-700/70">{event.name}</p>}
+      {event && (
+        <p className="mx-auto mb-4 max-w-full rounded-full bg-white px-5 py-2 text-center text-base font-semibold text-green-700 shadow-md">{event.name}</p>
+      )}
 
       {closed ? (
-        <p className="mt-16 text-center text-brand-navy-800">{closed}</p>
+        <p className={`mt-16 text-center ${bg ? 'rounded-2xl bg-black/50 px-4 py-6 text-white backdrop-blur' : 'text-brand-navy-800'}`}>{closed}</p>
       ) : (
         <>
           <input ref={inputRef} type="file" accept={ACCEPT} multiple onChange={onPick} className="sr-only" aria-label="Choose photos and videos" />
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
-            className="flex w-full flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed border-brand-blue-500/50 bg-brand-ice-50 px-6 py-14 text-center transition active:scale-[0.99] active:bg-white"
+            className={`flex w-full flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed px-6 py-14 text-center transition active:scale-[0.99] ${bg ? 'border-white/70 bg-white/85 backdrop-blur-md active:bg-white' : 'border-brand-blue-500/50 bg-brand-ice-50 active:bg-white'}`}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-12 w-12 text-brand-blue-500" aria-hidden>
               <path d="M12 16V4" /><path d="m7 9 5-5 5 5" /><path d="M20 16v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3" />
@@ -120,7 +128,7 @@ export default function MomentsPage({ params }: { params: Promise<{ slug: string
 
           {items.length > 0 && (
             <>
-              <p className="mt-6 text-sm text-brand-navy-700" aria-live="polite">
+              <p className={`mt-6 text-sm ${bg ? 'rounded-lg bg-black/50 px-3 py-2 text-white backdrop-blur' : 'text-brand-navy-700'}`} aria-live="polite">
                 {busy ? `Uploading… ${done} of ${items.length} done. Please keep this page open.` : `${done} of ${items.length} uploaded. Thank you!`}
               </p>
               <ul className="mt-3 grid grid-cols-3 gap-2">
@@ -158,5 +166,6 @@ export default function MomentsPage({ params }: { params: Promise<{ slug: string
         </>
       )}
     </main>
+    </>
   );
 }

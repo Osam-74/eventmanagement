@@ -75,7 +75,7 @@ export async function presignPut(key: string, contentType: string): Promise<stri
   );
 }
 
-export async function presignGet(key: string, opts: { download?: string; contentType?: string } = {}): Promise<string> {
+export async function presignGet(key: string, opts: { download?: string; contentType?: string; ttlSeconds?: number } = {}): Promise<string> {
   return getSignedUrl(
     client(),
     new GetObjectCommand({
@@ -84,7 +84,7 @@ export async function presignGet(key: string, opts: { download?: string; content
       ResponseContentDisposition: opts.download ? `attachment; filename="${opts.download.replace(/[^\w.\- ]/g, '_')}"` : undefined,
       ResponseContentType: opts.contentType,
     }),
-    { expiresIn: PRESIGN_GET_TTL_SECONDS }
+    { expiresIn: opts.ttlSeconds ?? PRESIGN_GET_TTL_SECONDS }
   );
 }
 

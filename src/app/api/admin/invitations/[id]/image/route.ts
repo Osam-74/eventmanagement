@@ -15,9 +15,17 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     return NextResponse.json({ ok: false, message: 'No stored image for this invitation' }, { status: 404 });
   }
 
-  const [url] = await bucket().file(snap.data()!.imageStoragePath as string).getSignedUrl({
+  const data = snap.data()!;
+  const download = req.nextUrl.searchParams.get('download') === '1';
+  const serialNumber = typeof data.serialNumber === 'string' ? data.serialNumber : 'invitation';
+  const safeFilename = `${serialNumber.replace(/[^a-zA-Z0-9_-]/g, '_')}.png`;
+
+  const [url] = await bucket().file(data.imageStoragePath as string).getSignedUrl({
     action: 'read',
     expires: Date.now() + 10 * 60 * 1000,
+    ...(download ? { responseDisposition: `attachment; filename="${safeFilename}"` } : {}),
   });
+
+  if (download) return NextResponse.redirect(url);
   return NextResponse.json({ ok: true, url });
 }

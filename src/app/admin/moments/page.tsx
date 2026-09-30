@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { adminJson } from '@/lib/client/api';
 import { useAdmin, useSelectedEvent } from '@/lib/client/useAdmin';
+import { guestMomentsUrl } from '@/lib/moments/guestLink';
+import { GuestLinkPanel } from '@/components/GuestLinkPanel';
 
 type Moment = { id: string; kind: 'photo' | 'video'; name: string; size: number; contentType: string; createdAt: string | null; guestId: string };
 type ListResp = { ok: boolean; items: Moment[]; nextCursor: string | null; total: number; configured: boolean; missing: string[]; slug: string | null };
@@ -91,7 +93,7 @@ export default function AdminMomentsPage() {
     else setMsg(r?.message ?? 'Could not delete.');
   }
 
-  const guestLink = slug && typeof window !== 'undefined' ? `${window.location.origin}/moments/${slug}` : '';
+  const guestLink = slug ? guestMomentsUrl(slug) : '';
   const canManage = can('canManageInvites');
   if (!eventId) return <p className="text-brand-navy-700">Select an event first.</p>;
 
@@ -109,16 +111,7 @@ export default function AdminMomentsPage() {
         </div>
       )}
 
-      {guestLink && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl bg-brand-ice-50 p-3 text-sm">
-          <span className="text-brand-navy-700/70">Guest upload link:</span>
-          <code className="break-all text-brand-navy-900">{guestLink}</code>
-          <button
-            onClick={() => { navigator.clipboard?.writeText(guestLink); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
-            className="rounded-md border border-brand-ice-200 bg-white px-2 py-1 text-xs text-brand-navy-700 hover:bg-brand-ice-50"
-          >{copied ? 'Copied' : 'Copy'}</button>
-        </div>
-      )}
+      {guestLink && <GuestLinkPanel link={guestLink} eventSlug={slug!} copied={copied} setCopied={setCopied} />}
 
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-brand-navy-700">{total} item{total === 1 ? '' : 's'}{selected.size > 0 && ` · ${selected.size} marked`}</span>

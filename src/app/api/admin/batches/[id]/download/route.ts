@@ -10,7 +10,9 @@ export const maxDuration = 300;
 
 /**
  * Streams a ZIP of all completed invitation cards for a batch.
- * Files are fetched from Storage one at a time to stay memory-safe.
+ * Storage objects are appended as read streams so the ZIP can start flowing
+ * to the browser immediately instead of downloading every image into memory
+ * one-by-one before each archive entry can be produced.
  */
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -33,24 +35,20 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const pass = new PassThrough();
   archive.pipe(pass);
 
-  (async () => {
-    for (const doc of invitations.docs) {
-      const data = doc.data();
-      if (!data.imageStoragePath) continue;
-      try {
-        const [buffer] = await bucket().file(data.imageStoragePath as string).download();
-        archive.append(buffer, { name: `${data.serialNumber}.jpg` });
-      } catch {
-        // skip unreadable file, keep going
-      }
-    }
-    await archive.finalize();
-  })().catch((e) => archive.destroy(e));
+  for (const doc of invitations.docs) {
+    const data = doc.data();
+    if (!data.imageStoragePath) continue;
+    const fileStream = bucket().file(data.imageStoragePath as string).createReadStream();
+    archive.append(fileStream, { name: `${data.serialNumber}.jpg` });
+  }
+
+  archive.finalize().catch((e) => archive.destroy(e));
 
   return new Response(pass as unknown as ReadableStream, {
     headers: {
       'Content-Type': 'application/zip',
       'Content-Disposition': `attachment; filename="batch-${id}.zip"`,
+      'Cache-Control': 'private, no-store',
     },
   });
 }

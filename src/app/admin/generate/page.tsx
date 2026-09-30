@@ -23,30 +23,15 @@ type Batch = {
   failedQuantity: number;
   outputProfile: string;
   createdAt: string | null;
-  // Present on batches created after the Card Type feature shipped
-  // (2026-09-12). Older batches have no `cardType` field at all — the
-  // table below falls back to deriving it from `tag`, so nothing needs a
-  // database migration.
   cardType?: CardType | null;
   tag?: string | null;
 };
 
-/**
- * Card Type is derived, never trusted blindly from the stored field alone:
- * a batch predating this feature has no `cardType`, only `tag` — resolve it
- * the same "always current, no migration needed" way as everything else in
- * this codebase (see src/lib/invitation/geometry.ts for the established
- * pattern).
- */
 function resolveCardType(b: Batch): CardType {
   if (b.cardType === 'special' || b.cardType === 'regular') return b.cardType;
   return b.tag ? 'special' : 'regular';
 }
 
-/**
- * Firestore's missing-index error embeds a direct console creation link —
- * render any URLs in the error message as clickable links.
- */
 function linkify(text: string) {
   const parts = text.split(/(https?:\/\/\S+)/g);
   return parts.map((part, i) =>
@@ -68,17 +53,15 @@ export default function GeneratePage() {
   const [cardType, setCardType] = useState<CardType>('regular');
   const [tag, setTag] = useState('');
   const [tagError, setTagError] = useState('');
-  const [usageLimit, setUsageLimit] = useState(''); // empty string = unlimited uses
+  const [usageLimit, setUsageLimit] = useState('');
   const [result, setResult] = useState<GenResponse | null>(null);
   const [busy, setBusy] = useState(false);
 
   const [batches, setBatches] = useState<Batch[]>([]);
   const [batchError, setBatchError] = useState('');
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState('');
 
-  // Deliberately not using adminJson for batches: it swallows non-OK
-  // responses into {} on error, which previously showed as a misleading
-  // "No batches yet" even when the real cause was a server error (e.g. a
-  // missing Firestore composite index) — surface the actual message.
   const loadBatches = useCallback(async () => {
     if (!eventId) return;
     setBatchError('');
@@ -91,10 +74,6 @@ export default function GeneratePage() {
 
   useEffect(() => { loadBatches(); }, [loadBatches]);
 
-  // Card Type is the single source of truth for the tag (owner request,
-  // 2026-09-12): switching back to Regular unmounts the Tag field AND
-  // clears whatever was typed, so a stale value can never linger and get
-  // sent by mistake if the field is re-shown later.
   function selectCardType(next: CardType) {
     setCardType(next);
     if (next === 'regular') {
@@ -128,19 +107,34 @@ export default function GeneratePage() {
     }).catch(() => null);
     setResult(r ?? { ok: false, message: 'Generation failed.' });
     setBusy(false);
-    loadBatches(); // the new batch shows up in the list below immediately
+    loadBatches();
   }
 
   async function download(id: string) {
-    const res = await adminFetch(`/api/admin/batches/${id}/download`);
-    if (!res.ok) return;
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `batch-${id}.zip`;
-    a.click();
-    URL.revokeObjectURL(url);
+    if (downloadingId) return;
+    setDownloadError('');
+    setDownloadingId(id);
+    try {
+      const res = await adminFetch(`/api/admin/batches/${id}/download`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setDownloadError(body.message ?? `Could not download this batch (HTTP ${res.status}).`);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `batch-${id}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setDownloadError('Download failed. Check your connection and try again.');
+    } finally {
+      setDownloadingId(null);
+    }
   }
 
   const inputCls =
@@ -150,13 +144,6 @@ export default function GeneratePage() {
     <div className="max-w-3xl space-y-6">
       <form onSubmit={generate} className="rounded-xl border border-brand-ice-200 bg-white p-4 shadow-sm">
         <h2 className="mb-3 font-semibold text-brand-navy-900">Generate invitation cards</h2>
-        {/* Field order (owner request, 2026-09-12): Card Type first,
-            then Quantity, then the conditional Tag, then Uses per card,
-            with Output profile last. */}
-        {/* Card Type (owner request, 2026-09-12): Regular hides the Tag
-            field entirely and defaults to standard serial-numbered cards.
-            Special reveals the Tag field and requires an input (e.g. VIP,
-            FAMILY) — that tag prints on the card instead of the serial. */}
         <div className="pt-0">
           <span className="text-sm text-brand-navy-800">Card Type</span>
           <div className="mt-1 flex gap-4">
@@ -270,16 +257,15 @@ export default function GeneratePage() {
         </div>
       )}
 
-      {/* Batches — merged onto this page so generate + download live together
-          (owner request, 2026-09-10). Redesigned into explicit columns
-          (owner request, 2026-09-12): Card Type and Quantity are now their
-          own sortable-looking columns instead of one grouped string. */}
       <div className="overflow-hidden rounded-xl border border-brand-ice-200 bg-white shadow-sm">
         <h2 className="border-b border-brand-ice-200 bg-brand-ice-50 px-4 py-3 font-semibold text-brand-navy-900">Batches</h2>
         {batchError && (
           <p className="mx-4 mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
             {linkify(batchError)} <button onClick={loadBatches} className="underline">Retry</button>
           </p>
+        )}
+        {downloadError && (
+          <p className="mx-4 mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{downloadError}</p>
         )}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[680px] text-sm">
@@ -295,6 +281,8 @@ export default function GeneratePage() {
             <tbody>
               {batches.map((b) => {
                 const type = resolveCardType(b);
+                const downloading = downloadingId === b.id;
+                const unavailable = b.completedQuantity === 0;
                 return (
                   <tr key={b.id} className="border-t border-brand-ice-100 transition hover:bg-brand-ice-50/60">
                     <td className="px-4 py-2.5">
@@ -318,10 +306,17 @@ export default function GeneratePage() {
                     <td className="px-4 py-2.5 text-right">
                       <button
                         onClick={() => download(b.id)}
-                        disabled={b.completedQuantity === 0}
-                        className="rounded-md border border-brand-ice-200 px-3 py-1 text-brand-navy-700 hover:bg-brand-ice-50 disabled:opacity-40"
+                        disabled={unavailable || downloadingId !== null}
+                        title={unavailable ? 'No completed cards are available in this batch' : 'Download all completed cards as a ZIP'}
+                        className={`min-w-[118px] rounded-md px-3 py-1.5 font-medium transition ${
+                          downloading
+                            ? 'bg-brand-blue-500 text-white'
+                            : unavailable
+                              ? 'cursor-not-allowed border border-brand-ice-200 bg-brand-ice-50 text-brand-navy-700/35'
+                              : 'border border-brand-blue-500 text-brand-blue-700 hover:bg-brand-blue-50 active:scale-[0.98]'
+                        } disabled:cursor-not-allowed`}
                       >
-                        Download ZIP
+                        {downloading ? 'Downloading…' : 'Download ZIP'}
                       </button>
                     </td>
                   </tr>

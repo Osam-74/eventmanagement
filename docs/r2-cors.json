@@ -1,0 +1,12 @@
+[
+  {
+    "AllowedOrigins": [
+      "https://eventmgt.deodevs.com",
+      "https://isaccessmanagement.vercel.app"
+    ],
+    "AllowedMethods": ["GET", "PUT", "HEAD"],
+    "AllowedHeaders": ["content-type"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]

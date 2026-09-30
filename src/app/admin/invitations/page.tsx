@@ -9,7 +9,7 @@ type Invitation = {
   id: string;
   serialNumber: string;
   tag: string | null;
-  usageLimit: number | null; // null = unlimited uses
+  usageLimit: number | null;
   usageCount: number;
   status: 'unused' | 'used' | 'revoked';
   outputProfile: string;
@@ -35,9 +35,6 @@ const STATUS_STYLE: Record<string, string> = {
   revoked: 'bg-red-100 text-red-700',
 };
 
-// Icon-only action buttons (see the Actions column below) — each pairs a
-// small inline SVG with a title/aria-label so the action stays labeled for
-// tooltips and screen readers even without visible text.
 const ICON_BASE = 'h-4 w-4';
 function HistoryIcon() {
   return (
@@ -80,7 +77,6 @@ function RescanIcon() {
   );
 }
 function ScansIcon() {
-  // "Sliders" glyph — adjust the scan allowance.
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON_BASE}>
       <path d="M4 21v-7" />
@@ -112,6 +108,15 @@ function DownloadIcon() {
     </svg>
   );
 }
+function MoreIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={ICON_BASE} aria-hidden="true">
+      <circle cx="5" cy="12" r="1.7" />
+      <circle cx="12" cy="12" r="1.7" />
+      <circle cx="19" cy="12" r="1.7" />
+    </svg>
+  );
+}
 function DeleteIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON_BASE}>
@@ -134,17 +139,14 @@ export default function InvitationsPage() {
   const [skip, setSkip] = useState(0);
   const [msg, setMsg] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [moreFor, setMoreFor] = useState<string | null>(null);
   const [rescanFor, setRescanFor] = useState<Invitation | null>(null);
   const [rescanReason, setRescanReason] = useState('');
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
-  // Edit-scans dialog: `limitFor` is the card being edited; `limitUnlimited`
-  // / `limitValue` are the draft (value kept as a string so the field can be
-  // cleared while typing); `limitSaving` blocks double submits.
   const [limitFor, setLimitFor] = useState<Invitation | null>(null);
   const [limitUnlimited, setLimitUnlimited] = useState(false);
   const [limitValue, setLimitValue] = useState('1');
   const [limitSaving, setLimitSaving] = useState(false);
-  // Tag draft for the same dialog. Empty string means "print the serial".
   const [tagValue, setTagValue] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleteTargets, setDeleteTargets] = useState<Invitation[] | null>(null);
@@ -164,6 +166,7 @@ export default function InvitationsPage() {
         setTotal(r.total);
         setSkip(offset);
         setSelected(new Set());
+        setMoreFor(null);
       }
     },
     [eventId, q, status]
@@ -463,59 +466,6 @@ export default function InvitationsPage() {
                   <td className="px-4 py-2.5 text-right">
                     <div className="flex justify-end gap-1.5">
                       <button
-                        onClick={() => setExpanded(expanded === inv.id ? null : inv.id)}
-                        title="History"
-                        aria-label="View history"
-                        className="rounded-md border border-brand-ice-200 p-1.5 text-brand-navy-700 hover:bg-brand-ice-50"
-                      >
-                        <HistoryIcon />
-                      </button>
-                      {inv.status === 'unused' && can('canManageInvites') && (
-                        <button
-                          onClick={() => revoke(inv)}
-                          title="Revoke"
-                          aria-label="Revoke invitation"
-                          className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
-                        >
-                          <RevokeIcon />
-                        </button>
-                      )}
-                      {inv.status === 'unused' && can('canGenerateInvites') && (
-                        <button
-                          onClick={() => regenerate(inv)}
-                          disabled={regeneratingId === inv.id}
-                          title={
-                            regeneratingId === inv.id
-                              ? 'Regenerating…'
-                              : 'Regenerate image — fixes a broken render (e.g. missing serial) by issuing a fresh QR + image. Only for cards not yet handed to a guest.'
-                          }
-                          aria-label="Regenerate image"
-                          className="rounded-md border border-brand-ice-200 p-1.5 text-brand-navy-700 hover:bg-brand-ice-50 disabled:opacity-50"
-                        >
-                          <RegenerateIcon spinning={regeneratingId === inv.id} />
-                        </button>
-                      )}
-                      {inv.status === 'used' && can('canManageInvites') && (
-                        <button
-                          onClick={() => setRescanFor(inv)}
-                          title="Allow rescan"
-                          aria-label="Allow rescan"
-                          className="rounded-md bg-amber-500 p-1.5 text-white hover:bg-amber-600"
-                        >
-                          <RescanIcon />
-                        </button>
-                      )}
-                      {inv.status !== 'revoked' && can('canManageInvites') && (
-                        <button
-                          onClick={() => openLimitEditor(inv)}
-                          title="Edit card (tag / scan limit)"
-                          aria-label="Edit card"
-                          className="rounded-md border border-brand-ice-200 p-1.5 text-brand-navy-700 hover:bg-brand-ice-50"
-                        >
-                          <ScansIcon />
-                        </button>
-                      )}
-                      <button
                         onClick={() => viewCard(inv)}
                         title="View card"
                         aria-label="View card"
@@ -531,16 +481,75 @@ export default function InvitationsPage() {
                       >
                         <DownloadIcon />
                       </button>
-                      {can('canManageInvites') && (
+                      <div className="relative">
                         <button
-                          onClick={() => setDeleteTargets([inv])}
-                          title="Delete"
-                          aria-label="Delete invitation"
-                          className="rounded-md border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
+                          type="button"
+                          onClick={() => setMoreFor(moreFor === inv.id ? null : inv.id)}
+                          title="More actions"
+                          aria-label="More actions"
+                          aria-expanded={moreFor === inv.id}
+                          className="rounded-md border border-brand-ice-200 p-1.5 text-brand-navy-700 hover:bg-brand-ice-50"
                         >
-                          <DeleteIcon />
+                          <MoreIcon />
                         </button>
-                      )}
+                        {moreFor === inv.id && (
+                          <div className="absolute right-0 top-full z-30 mt-1 w-52 overflow-hidden rounded-lg border border-brand-ice-200 bg-white py-1 text-left shadow-lg">
+                            <button
+                              type="button"
+                              onClick={() => { setExpanded(expanded === inv.id ? null : inv.id); setMoreFor(null); }}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-brand-navy-700 hover:bg-brand-ice-50"
+                            >
+                              <HistoryIcon /> History
+                            </button>
+                            {inv.status === 'unused' && can('canManageInvites') && (
+                              <button
+                                type="button"
+                                onClick={() => { setMoreFor(null); revoke(inv); }}
+                                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-700 hover:bg-red-50"
+                              >
+                                <RevokeIcon /> Revoke
+                              </button>
+                            )}
+                            {inv.status === 'unused' && can('canGenerateInvites') && (
+                              <button
+                                type="button"
+                                onClick={() => { setMoreFor(null); regenerate(inv); }}
+                                disabled={regeneratingId === inv.id}
+                                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-brand-navy-700 hover:bg-brand-ice-50 disabled:opacity-50"
+                              >
+                                <RegenerateIcon spinning={regeneratingId === inv.id} /> {regeneratingId === inv.id ? 'Regenerating…' : 'Regenerate image'}
+                              </button>
+                            )}
+                            {inv.status === 'used' && can('canManageInvites') && (
+                              <button
+                                type="button"
+                                onClick={() => { setMoreFor(null); setRescanFor(inv); }}
+                                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-amber-700 hover:bg-amber-50"
+                              >
+                                <RescanIcon /> Allow rescan
+                              </button>
+                            )}
+                            {inv.status !== 'revoked' && can('canManageInvites') && (
+                              <button
+                                type="button"
+                                onClick={() => { setMoreFor(null); openLimitEditor(inv); }}
+                                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-brand-navy-700 hover:bg-brand-ice-50"
+                              >
+                                <ScansIcon /> Edit card
+                              </button>
+                            )}
+                            {can('canManageInvites') && (
+                              <button
+                                type="button"
+                                onClick={() => { setMoreFor(null); setDeleteTargets([inv]); }}
+                                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-700 hover:bg-red-50"
+                              >
+                                <DeleteIcon /> Delete
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </td>
                 </tr>

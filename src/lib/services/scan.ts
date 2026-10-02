@@ -3,6 +3,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { digestToken } from '@/lib/qr/digest';
 import { normalizeSerial, hyphenateSerialCandidates } from '@/lib/invitation/serial';
 import { isPlausibleToken } from '@/lib/qr/token';
+import { tableForDisplay } from '@/lib/services/invitationTable';
 
 export type ScanOutcomeCode =
   | 'ACCEPTED'
@@ -19,6 +20,10 @@ export type ScanOutcome = {
   message: string;
   serialNumber?: string | null;
   tag?: string | null;
+  // Table/seat for the usher (owner request, 2026-10-02). Present ONLY when the
+  // card has a table set; otherwise the key is omitted entirely so the response
+  // is byte-identical to before this feature.
+  tableNumber?: string | null;
   firstUsedAt?: string | null;
   usedByUsherName?: string | null;
   checkedInAt?: string | null;
@@ -153,6 +158,8 @@ async function performScanOnce(firestore: Firestore, input: ScanInput): Promise<
     const invitation = invitationSnap.data()!;
     const serialNumber = invitation.serialNumber as string;
     const tag = (invitation.tag as string | null) ?? null;
+    const tableNumber = tableForDisplay(invitation.tableNumber);
+    const tableField = tableNumber ? { tableNumber } : {};
     // Carried onto every scanLog from here on (owner request, 2026-09-10):
     // the dashboard's recent-scans feed needs the tag so a family/VIP card
     // reads as "FAMILY" there too, not just on the Invitations page.
@@ -187,6 +194,7 @@ async function performScanOnce(firestore: Firestore, input: ScanInput): Promise<
         message: usageLimit !== null && usageLimit > 1 ? 'This card has no uses left' : 'Invitation already used',
         serialNumber,
         tag,
+        ...tableField,
         firstUsedAt: firstUsedAt ? firstUsedAt.toISOString() : null,
         usedByUsherName: (invitation.usedByUsherName as string | null) ?? null,
         usageCount,
@@ -234,6 +242,7 @@ async function performScanOnce(firestore: Firestore, input: ScanInput): Promise<
       message: 'Access granted',
       serialNumber,
       tag,
+      ...tableField,
       checkedInAt: checkedInAt.toDate().toISOString(),
       usageCount: newUsageCount,
       usageLimit,

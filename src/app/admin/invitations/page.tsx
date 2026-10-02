@@ -9,6 +9,7 @@ type Invitation = {
   id: string;
   serialNumber: string;
   tag: string | null;
+  tableNumber?: string | null;
   usageLimit: number | null;
   usageCount: number;
   status: 'unused' | 'used' | 'revoked';
@@ -136,6 +137,10 @@ export default function InvitationsPage() {
   const [limitValue, setLimitValue] = useState('1');
   const [limitSaving, setLimitSaving] = useState(false);
   const [tagValue, setTagValue] = useState('');
+  const [tableValue, setTableValue] = useState('');
+  const [bulkTableOpen, setBulkTableOpen] = useState(false);
+  const [bulkTable, setBulkTable] = useState('');
+  const [tableSaving, setTableSaving] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleteTargets, setDeleteTargets] = useState<Invitation[] | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -237,6 +242,7 @@ export default function InvitationsPage() {
     setLimitUnlimited(inv.usageLimit === null);
     setLimitValue(String(inv.usageLimit ?? Math.max(inv.usageCount, 1)));
     setTagValue(inv.tag ?? '');
+    setTableValue(inv.tableNumber ?? '');
   }
 
   function tagDraft(inv: Invitation): { changed: boolean; valid: boolean; next: string | null; note: string; tone: 'info' | 'good' | 'bad' } {
@@ -284,14 +290,53 @@ export default function InvitationsPage() {
       note: `${reopen ? 'Reopens this card. ' : ''}${left} scan${left === 1 ? '' : 's'} will remain (${inv.usageCount} of ${n} used).` };
   }
 
+  /** What the admin typed for a table, normalised the same way the server does. */
+  function tableDraft(inv: Invitation | null, raw: string): { valid: boolean; changed: boolean; next: string | null; note: string; tone: 'info' | 'good' | 'bad' } {
+    const next = raw.replace(/\s+/g, ' ').trim() || null;
+    const cur = inv?.tableNumber ?? null;
+    if (next && next.length > 24) return { valid: false, changed: true, next, tone: 'bad', note: 'Table must be 24 characters or fewer.' };
+    if (next && !/^[\p{L}\p{N} .,#\-/&']+$/u.test(next)) return { valid: false, changed: true, next, tone: 'bad', note: "Only letters, numbers, spaces and . , # - / & '" };
+    if (inv && next === cur) return { valid: true, changed: false, next, tone: 'info', note: cur ? `Ushers see: TABLE ${cur}` : 'No table set. Ushers will see nothing extra for this card.' };
+    return { valid: true, changed: true, next, tone: 'good', note: next ? `Ushers will see “TABLE ${next}” when they scan this card. The card itself does not change.` : 'The table will be removed. The card itself does not change.' };
+  }
+
+  async function postTable(ids: string[], table: string | null) {
+    return adminJson<{ ok: boolean; changed?: number; unchanged?: number; skipped?: { id: string; reason: string }[]; message?: string }>(
+      '/api/admin/invitations/table',
+      { method: 'POST', body: JSON.stringify({ eventId, invitationIds: ids, table }) }
+    ).catch(() => null);
+  }
+
+  async function saveBulkTable() {
+    const d = tableDraft(null, bulkTable);
+    if (!d.valid || selected.size === 0) return;
+    setTableSaving(true);
+    const r = await postTable([...selected], d.next);
+    setTableSaving(false);
+    if (r?.ok) {
+      setMsg(
+        d.next
+          ? `Table ${d.next} set on ${r.changed ?? 0} card(s)${r.unchanged ? ` (${r.unchanged} already had it)` : ''}. Cards themselves are unchanged.`
+          : `Table removed from ${r.changed ?? 0} card(s).`
+      );
+      setBulkTableOpen(false);
+      setBulkTable('');
+      load(skip);
+    } else {
+      setMsg(r?.message ?? 'Could not save the table.');
+    }
+  }
+
   async function saveLimit() {
     if (!limitFor) return;
     const d = limitDraft(limitFor);
     const t = tagDraft(limitFor);
     const limitChanged = d.valid;
     const tagChanged = t.changed && t.valid;
+    const tb = tableDraft(limitFor, tableValue);
+    const tableChanged = tb.changed && tb.valid;
     const limitBad = !d.valid && !d.unchanged;
-    if ((!limitChanged && !tagChanged) || !t.valid || limitBad) return;
+    if ((!limitChanged && !tagChanged && !tableChanged) || !t.valid || !tb.valid || limitBad) return;
     setLimitSaving(true);
     const done: string[] = [];
     const failed: string[] = [];
@@ -303,6 +348,11 @@ export default function InvitationsPage() {
       ).catch(() => null);
       if (r?.ok) done.push(t.next ? `now prints "${t.next}"` : `now prints its serial number`);
       else failed.push(r?.message ?? 'Could not update the tag.');
+    }
+    if (tableChanged) {
+      const r = await postTable([limitFor.id], tb.next);
+      if (r?.ok) done.push(tb.next ? `is at table ${tb.next}` : 'has no table');
+      else failed.push(r?.message ?? 'Could not update the table.');
     }
     if (limitChanged) {
       const r = await adminJson<{ ok: boolean; message?: string }>(
@@ -390,12 +440,20 @@ export default function InvitationsPage() {
       {selected.size > 0 && can('canManageInvites') && (
         <div className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 px-4 py-3">
           <p className="text-sm font-medium text-red-800">{selected.size} invitation(s) selected</p>
-          <button
-            onClick={() => setDeleteTargets(items.filter((i) => selected.has(i.id)))}
-            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
-          >
-            Delete selected
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { setBulkTable(''); setBulkTableOpen(true); }}
+              className="rounded-lg bg-brand-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-blue-600"
+            >
+              Set table
+            </button>
+            <button
+              onClick={() => setDeleteTargets(items.filter((i) => selected.has(i.id)))}
+              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+            >
+              Delete selected
+            </button>
+          </div>
         </div>
       )}
 
@@ -474,6 +532,7 @@ export default function InvitationsPage() {
                 </th>
               )}
               <th className="px-4 py-3">Serial / Tag</th>
+              <th className="px-4 py-3">Table</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Uses</th>
               <th className="px-4 py-3">Scanned by</th>
@@ -483,7 +542,7 @@ export default function InvitationsPage() {
           </thead>
           <tbody>
             {!loading && items.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-brand-navy-700/60">
+              <tr><td colSpan={can('canManageInvites') ? 8 : 7} className="px-4 py-10 text-center text-sm text-brand-navy-700/60">
                 {q || status || tag ? 'No invitations match these filters.' : 'No invitations yet.'}
               </td></tr>
             )}
@@ -505,6 +564,13 @@ export default function InvitationsPage() {
                       <span className="mr-1.5 rounded-full bg-brand-blue-500/10 px-2 py-0.5 text-xs font-semibold text-brand-blue-700">{inv.tag}</span>
                     )}
                     <span className={`font-mono font-medium text-brand-navy-900 ${inv.tag ? 'text-xs text-brand-navy-700/50' : ''}`}>{inv.serialNumber}</span>
+                  </td>
+                  <td className="px-4 py-2.5">
+                    {inv.tableNumber ? (
+                      <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800">{inv.tableNumber}</span>
+                    ) : (
+                      <span className="text-brand-navy-700/30">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-2.5">
                     <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[inv.status]}`}>{inv.status}</span>
@@ -602,7 +668,7 @@ export default function InvitationsPage() {
                 </tr>
                 {expanded === inv.id && (
                   <tr className="bg-brand-ice-50/70">
-                    <td colSpan={can('canManageInvites') ? 7 : 6} className="px-4 py-3 text-xs text-brand-navy-700/80">
+                    <td colSpan={can('canManageInvites') ? 8 : 7} className="px-4 py-3 text-xs text-brand-navy-700/80">
                       <p>Generated: {fmt(inv.generatedAt)} · Profile: {inv.outputProfile}</p>
                       {inv.status === 'revoked' && <p className="text-red-600">Revoked: {fmt(inv.revokedAt)} — {inv.revocationReason}</p>}
                       {inv.supersededByInvitationId && (
@@ -626,9 +692,6 @@ export default function InvitationsPage() {
                 )}
               </Fragment>
             ))}
-            {items.length === 0 && (
-              <tr><td colSpan={can('canManageInvites') ? 7 : 6} className="px-4 py-6 text-center text-brand-navy-700/50">No invitations found for this search.</td></tr>
-            )}
           </tbody>
         </table>
         </div>
@@ -688,7 +751,9 @@ export default function InvitationsPage() {
         const t = tagDraft(limitFor);
         const tagToneCls = { info: 'bg-brand-ice-50 text-brand-navy-700', good: 'bg-emerald-50 text-emerald-800', bad: 'bg-red-50 text-red-700' }[t.tone];
         const limitBad = !d.valid && !d.unchanged;
-        const anyChange = d.valid || (t.changed && t.valid);
+        const tb = tableDraft(limitFor, tableValue);
+        const tableToneCls = { info: 'bg-brand-ice-50 text-brand-navy-700', good: 'bg-emerald-50 text-emerald-800', bad: 'bg-red-50 text-red-700' }[tb.tone];
+        const anyChange = d.valid || (t.changed && t.valid) || (tb.changed && tb.valid);
         const toneCls = { info: 'bg-brand-ice-50 text-brand-navy-700', good: 'bg-emerald-50 text-emerald-800', warn: 'bg-amber-50 text-amber-800', bad: 'bg-red-50 text-red-700' }[d.tone];
         const step = (delta: number) => {
           const cur = Number(limitValue);
@@ -700,8 +765,8 @@ export default function InvitationsPage() {
             <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-brand">
               <h3 className="text-lg font-semibold text-brand-navy-900">Edit card {limitFor.tag ?? limitFor.serialNumber}</h3>
               <p className="mt-1 text-sm text-brand-navy-700/70">
-                Change the printed tag and/or how many times this card can be scanned. The QR code never changes, so
-                cards already shared keep working.
+                Change the printed tag, the table ushers see, and/or how many times this card can be scanned. The QR code
+                never changes, so cards already shared keep working.
               </p>
 
               <label htmlFor="card-tag" className="mt-4 block text-sm font-medium text-brand-navy-800">Printed tag / serial</label>
@@ -713,6 +778,15 @@ export default function InvitationsPage() {
               />
               <p className={`mt-2 rounded-lg px-3 py-2 text-xs ${tagToneCls}`} role="status">{t.note}</p>
               <p className="mt-1 text-xs text-brand-navy-700/60">Leave empty to print the serial number ({limitFor.serialNumber}).</p>
+
+              <label htmlFor="card-table" className="mt-5 block text-sm font-medium text-brand-navy-800">Table (shown to ushers when scanned)</label>
+              <input
+                id="card-table" type="text" value={tableValue} maxLength={24} autoComplete="off"
+                onChange={(e) => setTableValue(e.target.value)}
+                placeholder="e.g. 12 or A3"
+                className="mt-1 h-10 w-full rounded-lg border border-brand-ice-200 bg-brand-ice-50 px-3 text-sm text-brand-navy-900 outline-none focus:border-brand-blue-500 focus:bg-white"
+              />
+              <p className={`mt-2 rounded-lg px-3 py-2 text-xs ${tableToneCls}`} role="status">{tb.note}</p>
 
               <p className="mt-5 text-sm font-medium text-brand-navy-800">Scan limit</p>
 
@@ -751,10 +825,42 @@ export default function InvitationsPage() {
                 </button>
                 <button
                   onClick={saveLimit}
-                  disabled={!anyChange || !t.valid || limitBad || limitSaving}
+                  disabled={!anyChange || !t.valid || !tb.valid || limitBad || limitSaving}
                   className="rounded-lg bg-brand-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-blue-600 disabled:opacity-50"
                 >
                   {limitSaving ? 'Saving…' : 'Save changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {bulkTableOpen && (() => {
+        const d = tableDraft(null, bulkTable);
+        const cls = { info: 'bg-brand-ice-50 text-brand-navy-700', good: 'bg-emerald-50 text-emerald-800', bad: 'bg-red-50 text-red-700' }[d.tone];
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-navy-950/50 p-4">
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-brand">
+              <h3 className="text-lg font-semibold text-brand-navy-900">Set table for {selected.size} card{selected.size === 1 ? '' : 's'}</h3>
+              <p className="mt-1 text-sm text-brand-navy-700/70">
+                Ushers will see this table when they scan any of these cards. The cards themselves are not changed, so
+                ones already sent out keep working.
+              </p>
+              <label htmlFor="bulk-table" className="mt-4 block text-sm font-medium text-brand-navy-800">Table</label>
+              <input
+                id="bulk-table" type="text" value={bulkTable} maxLength={24} autoComplete="off" autoFocus
+                onChange={(e) => setBulkTable(e.target.value)}
+                placeholder="e.g. 12 or A3 (leave empty to remove)"
+                className="mt-1 h-10 w-full rounded-lg border border-brand-ice-200 bg-brand-ice-50 px-3 text-sm text-brand-navy-900 outline-none focus:border-brand-blue-500 focus:bg-white"
+              />
+              <p className={`mt-2 rounded-lg px-3 py-2 text-xs ${cls}`} role="status">
+                {bulkTable.trim() ? d.note : `Leaving this empty removes the table from the ${selected.size} selected card${selected.size === 1 ? '' : 's'}.`}
+              </p>
+              <div className="mt-5 flex justify-end gap-2">
+                <button onClick={() => setBulkTableOpen(false)} disabled={tableSaving} className="rounded-lg border border-brand-ice-200 px-4 py-2 text-sm text-brand-navy-700 hover:bg-brand-ice-50 disabled:opacity-50">Cancel</button>
+                <button onClick={saveBulkTable} disabled={!d.valid || tableSaving} className="rounded-lg bg-brand-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-blue-600 disabled:opacity-50">
+                  {tableSaving ? 'Saving…' : bulkTable.trim() ? 'Set table' : 'Remove table'}
                 </button>
               </div>
             </div>

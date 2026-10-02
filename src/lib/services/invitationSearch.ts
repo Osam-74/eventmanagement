@@ -25,10 +25,10 @@ export type SearchFilters = {
 
 export const norm = (v: unknown) => String(v ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
-export function matchesText(doc: { serialNumber?: unknown; tag?: unknown }, text: string): boolean {
+export function matchesText(doc: { serialNumber?: unknown; tag?: unknown; tableNumber?: unknown }, text: string): boolean {
   const needle = norm(text);
   if (!needle) return true;
-  return norm(doc.serialNumber).includes(needle) || norm(doc.tag).includes(needle);
+  return norm(doc.serialNumber).includes(needle) || norm(doc.tag).includes(needle) || norm(doc.tableNumber).includes(needle);
 }
 
 export function matchesTag(doc: { tag?: unknown }, tag: string | undefined): boolean {

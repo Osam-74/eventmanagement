@@ -29,6 +29,7 @@ function toDTO(id: string, data: Record<string, unknown>): InvitationDTO {
     batchId: data.batchId,
     serialNumber: data.serialNumber,
     tag: data.tag ?? null,
+    tableNumber: typeof data.tableNumber === 'string' && data.tableNumber.trim() ? data.tableNumber.trim() : null,
     usageLimit: data.usageLimit === undefined ? 1 : data.usageLimit,
     usageCount: data.usageCount ?? (data.status === 'used' ? 1 : 0),
     status: data.status,

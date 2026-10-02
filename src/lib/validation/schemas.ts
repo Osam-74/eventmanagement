@@ -201,6 +201,16 @@ export const updateTagSchema = z.object({
   reason: z.string().max(300).default(''),
 });
 
+// Table / seat shown to the usher at scan time (owner request, 2026-10-02).
+// Stored only in the database, never drawn on the card. The detailed rules live in
+// parseTableNumber (services/invitationTable); the schema just bounds the shape.
+export const setTableSchema = z.object({
+  eventId: z.string().min(4),
+  invitationIds: z.array(z.string().min(1).max(200)).min(1).max(500),
+  // blank or null clears the table
+  table: z.string().max(60).nullable(),
+});
+
 export const allowRescanSchema = z.object({
   reason: z.string().min(3).max(300),
 });

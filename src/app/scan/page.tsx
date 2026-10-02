@@ -16,8 +16,8 @@ type SessionInfo = {
 };
 
 type ScanResult =
-  | { kind: 'granted'; serial: string | null; tag: string | null; at: string | null; usageCount?: number; usageLimit?: number | null }
-  | { kind: 'denied'; code: string; message: string; serial: string | null; tag: string | null; firstUsedAt?: string | null }
+  | { kind: 'granted'; serial: string | null; tag: string | null; table?: string | null; at: string | null; usageCount?: number; usageLimit?: number | null }
+  | { kind: 'denied'; code: string; message: string; serial: string | null; tag: string | null; table?: string | null; firstUsedAt?: string | null }
   | { kind: 'error'; message: string };
 
 const COOLDOWN_MS = 2500;
@@ -289,6 +289,7 @@ export default function ScannerPage() {
           kind: 'granted',
           serial: body.serialNumber ?? null,
           tag: body.tag ?? null,
+          table: body.tableNumber ?? null,
           at: body.checkedInAt ?? null,
           usageCount: body.usageCount,
           usageLimit: body.usageLimit,
@@ -302,6 +303,7 @@ export default function ScannerPage() {
           message: body.message,
           serial: body.serialNumber ?? null,
           tag: body.tag ?? null,
+          table: body.code === 'ALREADY_USED' ? (body.tableNumber ?? null) : null,
           firstUsedAt: body.firstUsedAt ?? null,
         });
         beep(false);
@@ -593,6 +595,11 @@ export default function ScannerPage() {
                     <>
                       <p className="text-2xl font-black tracking-wide">ACCESS GRANTED ✓</p>
                       {result.tag && <p className="mt-1.5 text-base font-semibold">{result.tag}</p>}
+                      {result.table && (
+                        <p className="mx-auto mt-2 w-fit max-w-full rounded-xl bg-white px-4 py-1.5 text-xl font-black text-emerald-700" data-testid="scan-table">
+                          TABLE {result.table}
+                        </p>
+                      )}
                       {result.serial && <p className="mt-1 font-mono text-sm opacity-90">No. {result.serial}</p>}
                       {typeof result.usageCount === 'number' && result.usageLimit !== 1 && (
                         <p className="mt-1 text-xs opacity-80">
@@ -607,6 +614,11 @@ export default function ScannerPage() {
                       <p className="text-2xl font-black tracking-wide">{result.code === 'ALREADY_USED' ? 'ALREADY USED ✗' : 'DENIED ✗'}</p>
                       <p className="mt-1.5 text-sm">{result.message}</p>
                       {result.tag && <p className="mt-1 text-sm font-semibold">{result.tag}</p>}
+                      {result.table && (
+                        <p className="mx-auto mt-1.5 w-fit max-w-full rounded-lg bg-white px-3 py-1 text-base font-black text-red-700" data-testid="scan-table">
+                          TABLE {result.table}
+                        </p>
+                      )}
                       {result.serial && <p className="mt-1 font-mono text-sm">No. {result.serial}</p>}
                       {result.firstUsedAt && (
                         <p className="mt-1 text-xs opacity-80">

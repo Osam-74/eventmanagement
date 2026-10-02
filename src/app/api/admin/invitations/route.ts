@@ -8,11 +8,19 @@ import { normalizeSerial, hyphenateSerialCandidates } from '@/lib/invitation/ser
 import { badRequest, requirePermission } from '@/lib/api/helpers';
 import { deleteInvitationsSchema } from '@/lib/validation/schemas';
 import { deleteInvitations } from '@/lib/services/invitationAdmin';
+import { scanInvitations, listTags } from '@/lib/services/invitationSearch';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 type InvitationDTO = Record<string, unknown>;
+
+/** Digest of a pasted QR credential, or null when the text is not a valid token. */
+function safeDigest(text: string): string | null {
+  try { return digestToken(text); } catch { return null; }
+}
+/** A serial looks like LETTERS then digits (ISWED00042). Plain words like FAMILY or 42 do not. */
+const isSerialShaped = (normalized: string) => /^[A-Z][A-Z0-9]*\d{3,}$/.test(normalized);
 
 function toDTO(id: string, data: Record<string, unknown>): InvitationDTO {
   return {
@@ -59,12 +67,51 @@ export async function GET(req: NextRequest) {
   const eventId = url.searchParams.get('eventId') ?? '';
   const q = url.searchParams.get('q')?.trim() ?? '';
   const status = url.searchParams.get('status') ?? '';
+  const tag = (url.searchParams.get('tag') ?? '').slice(0, 60);
   const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') ?? '50', 10) || 50, 1), 100);
   const skip = Math.max(parseInt(url.searchParams.get('skip') ?? '0', 10) || 0, 0);
 
   if (!eventId) return badRequest('eventId is required');
 
+  // Tags used in this event, for the Tag filter dropdown.
+  if (url.searchParams.get('tags') === '1') {
+    return NextResponse.json({ ok: true, tags: await listTags(db(), eventId) });
+  }
+
   let items: InvitationDTO[] = [];
+  const statusFilter = (['unused', 'used', 'revoked'] as const).find((x) => x === status) ?? '';
+  const scanTagOk = (i: InvitationDTO, t: string) => {
+    const v = typeof i.tag === 'string' ? i.tag.trim() : '';
+    return t === '__tagged__' ? v !== '' : t === '__untagged__' ? v === '' : v.toUpperCase() === t.trim().toUpperCase();
+  };
+  /** Substring search over serial + tag (and the tag filter), paged in memory with exact totals. */
+  const containsResponse = async (exactFirst: string[] = []) => {
+    const { docs: found, truncated } = await scanInvitations(db(), { eventId, text: q, status: statusFilter, tag });
+    const docs = [...found.filter((d) => exactFirst.includes(d.id)), ...found.filter((d) => !exactFirst.includes(d.id))];
+    const page = docs.slice(skip, skip + limit).map((d) => toDTO(d.id, d.data));
+    return NextResponse.json({ ok: true, items: page, total: docs.length, truncated });
+  };
+
+  /** When exactly one card is shown, attach its recent scans (who scanned it, and when). */
+  const withHistory = async (list: InvitationDTO[]) => {
+    if (list.length !== 1) return list;
+    const logs = await db()
+      .collection('scanLogs')
+      .where('tokenDigest', '==', list[0].id)
+      .orderBy('scannedAt', 'desc')
+      .limit(10)
+      .get();
+    (list[0] as Record<string, unknown>).recentScans = logs.docs.map((d) => {
+      const data = d.data();
+      return {
+        result: data.result,
+        usherName: data.usherNameSnapshot,
+        gateId: data.gateId,
+        scannedAt: data.scannedAt?.toDate?.()?.toISOString?.() ?? null,
+      };
+    });
+    return list;
+  };
 
   if (q) {
     const serial = normalizeSerial(q);
@@ -91,27 +138,24 @@ export async function GET(req: NextRequest) {
       // digest key not configured or token malformed — ignore
     }
 
-    // single result: attach its recent scan history (scanned by who, at what time)
-    if (items.length === 1) {
-      const logs = await db()
-        .collection('scanLogs')
-        .where('tokenDigest', '==', items[0].id)
-        .orderBy('scannedAt', 'desc')
-        .limit(10)
-        .get();
-      (items[0] as Record<string, unknown>).recentScans = logs.docs.map((d) => {
-        const data = d.data();
-        return {
-          result: data.result,
-          usherName: data.usherNameSnapshot,
-          gateId: data.gateId,
-          scannedAt: data.scannedAt?.toDate?.()?.toISOString?.() ?? null,
-        };
-      });
+    // The exact lookups ignore the status/tag filters, so apply them to what they found.
+    items = items.filter((i) => (!statusFilter || i.status === statusFilter) && (!tag || scanTagOk(i, tag)));
+
+    // A pasted QR code / one full serial is a precise trace: show just that card (with its scan history).
+    const qrHit = items.some((i) => i.id === safeDigest(q));
+    const serialHit = isSerialShaped(serial) && items.some((i) => normalizeSerial(String(i.serialNumber ?? '')) === serial);
+    if (qrHit || serialHit) {
+      // only the exactly-matched card(s), so the single-card view can show its scan history
+      const exact = items.filter((i) => i.id === safeDigest(q) || normalizeSerial(String(i.serialNumber ?? '')) === serial);
+      return NextResponse.json({ ok: true, items: await withHistory(exact), total: exact.length });
     }
 
-    return NextResponse.json({ ok: true, items, total: items.length });
+    // Everything else is a "contains" search over serial AND tag, so typing a tag name
+    // (FAMILY, VIP, BRIDE…) or part of a number finds every matching card.
+    return containsResponse(items.map((i) => String(i.id)));
   }
+
+  if (tag) return containsResponse();
 
   let query = db().collection('invitations').where('eventId', '==', eventId);
   if (['unused', 'used', 'revoked'].includes(status)) {

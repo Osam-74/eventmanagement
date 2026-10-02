@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { adminJson } from '@/lib/client/api';
 import { useAdmin, useSelectedEvent } from '@/lib/client/useAdmin';
 import { isDrawableSerialText, DRAWABLE_SERIAL_PUNCTUATION } from '@/lib/invitation/serialGlyphs';
@@ -117,6 +117,11 @@ export default function InvitationsPage() {
   const { eventId } = useSelectedEvent();
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
+  const [tag, setTag] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
+  const [truncated, setTruncated] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [typed, setTyped] = useState('');
   const [items, setItems] = useState<Invitation[]>([]);
   const [total, setTotal] = useState(0);
   const [skip, setSkip] = useState(0);
@@ -135,25 +140,46 @@ export default function InvitationsPage() {
   const [deleteTargets, setDeleteTargets] = useState<Invitation[] | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  const reqId = useRef(0);
   const load = useCallback(
     async (offset = 0) => {
       if (!eventId) return;
       const params = new URLSearchParams({ eventId, limit: '50', skip: String(offset) });
       if (q) params.set('q', q);
       if (status) params.set('status', status);
-      const r = await adminJson<{ ok: boolean; items: Invitation[]; total: number }>(
+      if (tag) params.set('tag', tag);
+      const mine = ++reqId.current;
+      setLoading(true);
+      const r = await adminJson<{ ok: boolean; items: Invitation[]; total: number; truncated?: boolean }>(
         `/api/admin/invitations?${params.toString()}`
       ).catch(() => null);
+      if (mine !== reqId.current) return; // a newer search started: drop this stale answer
+      setLoading(false);
       if (r?.ok) {
         setItems(r.items);
         setTotal(r.total);
+        setTruncated(Boolean(r.truncated));
         setSkip(offset);
         setSelected(new Set());
         setMoreFor(null);
       }
     },
-    [eventId, q, status]
+    [eventId, q, status, tag]
   );
+
+  // Search as you type: wait for a short pause so we do not query on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setQ(typed.trim()), 350);
+    return () => clearTimeout(t);
+  }, [typed]);
+
+  // Tag dropdown options for this event.
+  useEffect(() => {
+    if (!eventId) return;
+    adminJson<{ ok: boolean; tags: string[] }>(`/api/admin/invitations?eventId=${encodeURIComponent(eventId)}&tags=1`)
+      .then((r) => { if (r?.ok) setTags(r.tags); })
+      .catch(() => undefined);
+  }, [eventId, total]);
 
   useEffect(() => { load(0); }, [load]);
 
@@ -355,31 +381,9 @@ export default function InvitationsPage() {
     <div className="space-y-4">
       <div className="rounded-xl border border-brand-ice-200 bg-white p-4 shadow-sm">
         <h2 className="mb-1 font-semibold text-brand-navy-900">Invitations — trace &amp; manage</h2>
-        <p className="mb-3 text-sm text-brand-navy-700/60">
-          Search by the serial number printed on the card (e.g. <code>ISWED-00042</code>) or paste a scanned QR
-          credential.
+        <p className="text-sm text-brand-navy-700/60">
+          Type part of a serial number (e.g. <code>00042</code>), a tag like <code>VIP</code>, or paste a scanned QR credential.
         </p>
-        <div className="flex flex-wrap gap-2">
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Serial number or scanned QR code…"
-            className="min-w-[180px] flex-1 rounded-lg border border-brand-ice-200 bg-brand-ice-50 px-3 py-2 text-sm text-brand-navy-900 outline-none focus:border-brand-blue-500 focus:bg-white focus:ring-2 focus:ring-brand-blue-500/20"
-          />
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            className="rounded-lg border border-brand-ice-200 bg-brand-ice-50 px-3 py-2 text-sm text-brand-navy-900 outline-none focus:border-brand-blue-500"
-          >
-            <option value="">All statuses</option>
-            <option value="unused">Unused</option>
-            <option value="used">Used</option>
-            <option value="revoked">Revoked</option>
-          </select>
-          <button onClick={() => load(0)} className="rounded-lg bg-brand-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-blue-600">
-            Search
-          </button>
-        </div>
         {msg && <p className="mt-2 text-sm text-brand-navy-700">{msg}</p>}
       </div>
 
@@ -394,6 +398,65 @@ export default function InvitationsPage() {
           </button>
         </div>
       )}
+
+      {/* ---- Filter bar: directly above the table ---- */}
+      <div className="space-y-3 rounded-xl border border-brand-ice-200 bg-white p-3 shadow-sm" role="search">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[200px] flex-1">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-navy-700/40" aria-hidden><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+            <input
+              type="search"
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { setQ(typed.trim()); } }}
+              placeholder="Search serial number, tag or QR code…"
+              aria-label="Search invitations"
+              className="w-full rounded-lg border border-brand-ice-200 bg-brand-ice-50 py-2 pl-9 pr-3 text-sm text-brand-navy-900 outline-none focus:border-brand-blue-500 focus:bg-white focus:ring-2 focus:ring-brand-blue-500/20"
+            />
+          </div>
+          <select
+            value={tag}
+            onChange={(e) => setTag(e.target.value)}
+            aria-label="Filter by tag"
+            className="rounded-lg border border-brand-ice-200 bg-brand-ice-50 px-3 py-2 text-sm text-brand-navy-900 outline-none focus:border-brand-blue-500"
+          >
+            <option value="">All tags</option>
+            <option value="__tagged__">Any tag</option>
+            <option value="__untagged__">No tag</option>
+            {tags.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+          {(typed || status || tag) && (
+            <button
+              type="button"
+              onClick={() => { setTyped(''); setQ(''); setStatus(''); setTag(''); }}
+              className="rounded-lg border border-brand-ice-200 px-3 py-2 text-sm font-medium text-brand-navy-700 hover:bg-brand-ice-50"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter by status">
+          {([['', 'All'], ['unused', 'Unused'], ['used', 'Used'], ['revoked', 'Revoked']] as const).map(([v, label]) => (
+            <button
+              key={v || 'all'}
+              type="button"
+              aria-pressed={status === v}
+              onClick={() => setStatus(v)}
+              className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${status === v ? 'border-brand-blue-500 bg-brand-blue-500 text-white' : 'border-brand-ice-200 bg-white text-brand-navy-700 hover:bg-brand-ice-50'}`}
+            >
+              {label}
+            </button>
+          ))}
+          <span className="ml-auto text-xs text-brand-navy-700/60" aria-live="polite">
+            {loading ? 'Searching…' : `${total} invitation${total === 1 ? '' : 's'}${q || status || tag ? ' match' : ''}`}
+          </span>
+        </div>
+        {truncated && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800" role="status">
+            This event is very large, so only the first part was searched. Type more of the serial to narrow it down.
+          </p>
+        )}
+      </div>
 
       <div className="overflow-hidden rounded-xl border border-brand-ice-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
@@ -419,6 +482,11 @@ export default function InvitationsPage() {
             </tr>
           </thead>
           <tbody>
+            {!loading && items.length === 0 && (
+              <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-brand-navy-700/60">
+                {q || status || tag ? 'No invitations match these filters.' : 'No invitations yet.'}
+              </td></tr>
+            )}
             {items.map((inv) => (
               <Fragment key={inv.id}>
                 <tr className="border-t border-brand-ice-100 transition hover:bg-brand-ice-50/60">
@@ -573,7 +641,7 @@ export default function InvitationsPage() {
             >
               Previous
             </button>
-            <span>{skip}–{skip + items.length} of {total}</span>
+            <span>{items.length ? skip + 1 : 0}–{skip + items.length} of {total}</span>
             <button
               disabled={skip + 50 >= total}
               onClick={() => load(skip + 50)}

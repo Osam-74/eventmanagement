@@ -230,7 +230,15 @@ export default function ScannerPage() {
     }
   }
 
-  const RESULT_DISPLAY_MS = 3000;
+  // 10s (owner request, 2026-10-03; was 3s). Keep scan-toast-bar's duration in
+  // globals.css in sync with this value.
+  const RESULT_DISPLAY_MS = 10000;
+
+  // Ushers can dismiss the result popup early with the close button.
+  function closeResult() {
+    if (resultTimerRef.current) { clearTimeout(resultTimerRef.current); resultTimerRef.current = null; }
+    setResult(null);
+  }
 
   function showResult(r: ScanResult) {
     if (resultTimerRef.current) clearTimeout(resultTimerRef.current);
@@ -577,9 +585,10 @@ export default function ScannerPage() {
                 positioned INSIDE the camera card, pinned to its top edge,
                 above the video and the scanning frame (z-30) — it never
                 shifts the page layout since it's out of flow relative to
-                this card. Auto-closes after 3s via showResult()'s timer;
+                this card. Auto-closes after 10s via showResult()'s timer, or sooner via
+                the close (X) button;
                 the thin bar at the bottom is a pure CSS animation
-                (scan-toast-bar, globals.css) timed to the same 3000ms, so
+                (scan-toast-bar, globals.css) timed to the same 10000ms, so
                 there's a visual countdown with no numbers. Keyed by
                 resultSeq so the entrance + bar animations restart cleanly
                 even when consecutive scans produce the identical result. */}
@@ -590,7 +599,18 @@ export default function ScannerPage() {
                   result.kind === 'granted' ? 'bg-emerald-600' : result.kind === 'denied' ? 'bg-red-600' : 'bg-amber-600'
                 }`}
               >
-                <div className="p-4 text-center">
+                <button
+                  type="button"
+                  onClick={closeResult}
+                  aria-label="Close result"
+                  data-testid="scan-result-close"
+                  className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/25 text-white transition hover:bg-black/40 active:scale-95"
+                >
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+                <div className="px-10 py-4 text-center">
                   {result.kind === 'granted' && (
                     <>
                       <p className="text-2xl font-black tracking-wide">ACCESS GRANTED ✓</p>
@@ -629,7 +649,7 @@ export default function ScannerPage() {
                   )}
                   {result.kind === 'error' && <p className="text-lg font-bold">{result.message}</p>}
                 </div>
-                {/* Countdown line — shrinks to nothing over exactly 3s, no digits. */}
+                {/* Countdown line — shrinks to nothing over exactly 10s, no digits. */}
                 <div className="h-1 w-full bg-white/25">
                   <div className="scan-toast-bar h-full w-full bg-white/80" />
                 </div>

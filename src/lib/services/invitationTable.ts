@@ -14,7 +14,8 @@ import type { AdminActor } from './invitationAdmin';
  * Absent / null / blank = no table assigned: scanning shows nothing extra,
  * exactly as before this feature.
  */
-export const TABLE_MAX_LENGTH = 24;
+import { TABLE_MAX_LENGTH } from '@/lib/invitation/tableLimits';
+export { TABLE_MAX_LENGTH };
 export const BULK_TABLE_MAX = 500;
 
 export type TableParse = { ok: true; value: string | null } | { ok: false; message: string };

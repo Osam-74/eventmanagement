@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { adminJson } from '@/lib/client/api';
 import { useAdmin, useSelectedEvent } from '@/lib/client/useAdmin';
+import { TABLE_MAX_LENGTH } from '@/lib/invitation/tableLimits';
 import { isDrawableSerialText, DRAWABLE_SERIAL_PUNCTUATION } from '@/lib/invitation/serialGlyphs';
 
 type Invitation = {
@@ -294,7 +295,7 @@ export default function InvitationsPage() {
   function tableDraft(inv: Invitation | null, raw: string): { valid: boolean; changed: boolean; next: string | null; note: string; tone: 'info' | 'good' | 'bad' } {
     const next = raw.replace(/\s+/g, ' ').trim() || null;
     const cur = inv?.tableNumber ?? null;
-    if (next && next.length > 24) return { valid: false, changed: true, next, tone: 'bad', note: 'Table must be 24 characters or fewer.' };
+    if (next && next.length > TABLE_MAX_LENGTH) return { valid: false, changed: true, next, tone: 'bad', note: `Table must be ${TABLE_MAX_LENGTH} characters or fewer (${next.length}/${TABLE_MAX_LENGTH}).` };
     if (next && !/^[\p{L}\p{N} .,#\-/&']+$/u.test(next)) return { valid: false, changed: true, next, tone: 'bad', note: "Only letters, numbers, spaces and . , # - / & '" };
     if (inv && next === cur) return { valid: true, changed: false, next, tone: 'info', note: cur ? `Ushers see: TABLE ${cur}` : 'No table set. Ushers will see nothing extra for this card.' };
     return { valid: true, changed: true, next, tone: 'good', note: next ? `Ushers will see “TABLE ${next}” when they scan this card. The card itself does not change.` : 'The table will be removed. The card itself does not change.' };
@@ -567,7 +568,7 @@ export default function InvitationsPage() {
                   </td>
                   <td className="px-4 py-2.5">
                     {inv.tableNumber ? (
-                      <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800">{inv.tableNumber}</span>
+                      <span title={inv.tableNumber} className="inline-block max-w-[16rem] whitespace-normal break-words rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800">{inv.tableNumber}</span>
                     ) : (
                       <span className="text-brand-navy-700/30">—</span>
                     )}
@@ -781,9 +782,9 @@ export default function InvitationsPage() {
 
               <label htmlFor="card-table" className="mt-5 block text-sm font-medium text-brand-navy-800">Table (shown to ushers when scanned)</label>
               <input
-                id="card-table" type="text" value={tableValue} maxLength={24} autoComplete="off"
+                id="card-table" type="text" value={tableValue} maxLength={TABLE_MAX_LENGTH} autoComplete="off"
                 onChange={(e) => setTableValue(e.target.value)}
-                placeholder="e.g. 12 or A3"
+                placeholder="e.g. 12, A3, or 1, 2, 3, 4"
                 className="mt-1 h-10 w-full rounded-lg border border-brand-ice-200 bg-brand-ice-50 px-3 text-sm text-brand-navy-900 outline-none focus:border-brand-blue-500 focus:bg-white"
               />
               <p className={`mt-2 rounded-lg px-3 py-2 text-xs ${tableToneCls}`} role="status">{tb.note}</p>
@@ -849,9 +850,9 @@ export default function InvitationsPage() {
               </p>
               <label htmlFor="bulk-table" className="mt-4 block text-sm font-medium text-brand-navy-800">Table</label>
               <input
-                id="bulk-table" type="text" value={bulkTable} maxLength={24} autoComplete="off" autoFocus
+                id="bulk-table" type="text" value={bulkTable} maxLength={TABLE_MAX_LENGTH} autoComplete="off" autoFocus
                 onChange={(e) => setBulkTable(e.target.value)}
-                placeholder="e.g. 12 or A3 (leave empty to remove)"
+                placeholder="e.g. 12, A3, or 1, 2, 3, 4 (leave empty to remove)"
                 className="mt-1 h-10 w-full rounded-lg border border-brand-ice-200 bg-brand-ice-50 px-3 text-sm text-brand-navy-900 outline-none focus:border-brand-blue-500 focus:bg-white"
               />
               <p className={`mt-2 rounded-lg px-3 py-2 text-xs ${cls}`} role="status">

@@ -208,7 +208,9 @@ export const setTableSchema = z.object({
   eventId: z.string().min(4),
   invitationIds: z.array(z.string().min(1).max(200)).min(1).max(500),
   // blank or null clears the table
-  table: z.string().max(60).nullable(),
+  // Outer bound only; the real limit is TABLE_MAX_LENGTH (120) in parseTableNumber. Kept above it
+  // on purpose (a unit test guards that) so this never rejects what the service would accept.
+  table: z.string().max(200).nullable(),
 });
 
 export const allowRescanSchema = z.object({

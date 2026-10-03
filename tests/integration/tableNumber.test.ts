@@ -1,7 +1,7 @@
 import { beforeAll, afterAll, describe, expect, it } from 'vitest';
 import { makeDb, seedEvent, seedInvitation, seedUsher, EV1, EV2, invitationDoc, eventDoc, ACTOR, auditLogsFor } from './helpers';
 import { performScan } from '@/lib/services/scan';
-import { setInvitationTables, parseTableNumber, tableForDisplay } from '@/lib/services/invitationTable';
+import { setInvitationTables, parseTableNumber, tableForDisplay, TABLE_MAX_LENGTH } from '@/lib/services/invitationTable';
 import { matchesText } from '@/lib/services/invitationSearch';
 
 const hasEmu = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
@@ -20,10 +20,19 @@ describe('table parsing (pure)', () => {
     expect(parseTableNumber(null)).toEqual({ ok: true, value: null });
   });
   it('rejects too long and odd characters (no markup / script text)', () => {
-    expect(parseTableNumber('x'.repeat(25)).ok).toBe(false);
+    expect(parseTableNumber('x'.repeat(TABLE_MAX_LENGTH + 1)).ok).toBe(false);
     expect(parseTableNumber('<b>1</b>').ok).toBe(false);
     expect(parseTableNumber('1; drop').ok).toBe(false);
     expect(parseTableNumber(12 as unknown as string).ok).toBe(false);
+  });
+  it('allows a tag spanning ~20 tables (owner request, 2026-10-03)', () => {
+    const twenty = Array.from({ length: 20 }, (_, i) => i + 1).join(', '); // "1, 2, ... 20"
+    expect(twenty.length).toBeLessThanOrEqual(TABLE_MAX_LENGTH);
+    expect(parseTableNumber(twenty)).toEqual({ ok: true, value: twenty });
+    const words = 'Tables 1-20, Head Table & VIP Row A/B';
+    expect(parseTableNumber(words)).toEqual({ ok: true, value: words });
+    expect(parseTableNumber('x'.repeat(TABLE_MAX_LENGTH)).ok).toBe(true);
+    expect(TABLE_MAX_LENGTH).toBeGreaterThan(24);
   });
   it('display: only non-blank strings show', () => {
     expect(tableForDisplay(undefined)).toBeNull();
@@ -188,10 +197,19 @@ describe.skipIf(!hasEmu)('table number on real cards', () => {
     expect((await db!.db.collection('invitations').doc('does-not-exist').get()).exists).toBe(false);
   });
 
+  it('a long multi-table label saves and reaches the usher intact', async () => {
+    const inv = await seedInvitation(db!.db, { serialNumber: 'ISWED00399', tag: 'GRANDPARENTS' });
+    const twenty = Array.from({ length: 20 }, (_, i) => i + 1).join(', ');
+    const r = await setInvitationTables(db!.db, { eventId: EV1, invitationIds: [inv.digest], table: twenty, admin });
+    expect(r).toMatchObject({ ok: true, changed: 1 });
+    expect((await raw(inv.digest)).tableNumber).toBe(twenty);
+    expect(await scan(inv.token)).toMatchObject({ code: 'ACCEPTED', tableNumber: twenty, tag: 'GRANDPARENTS' });
+  });
+
   it('invalid input is refused and writes nothing', async () => {
     const inv = await seedInvitation(db!.db, { serialNumber: 'ISWED00318' });
     const before = await raw(inv.digest);
-    for (const bad of ['<script>', 'x'.repeat(30)]) {
+    for (const bad of ['<script>', 'x'.repeat(TABLE_MAX_LENGTH + 1)]) {
       const r = await setInvitationTables(db!.db, { eventId: EV1, invitationIds: [inv.digest], table: bad, admin });
       expect(r.ok).toBe(false);
     }

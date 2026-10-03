@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type QrScanner from 'qr-scanner';
 import { shouldSubmitToken, shouldSleepFromInactivity } from '@/lib/client/scanClient';
+import { TABLE_LONG_THRESHOLD } from '@/lib/invitation/tableLimits';
 
 type SessionInfo = {
   usherName: string;
@@ -14,6 +15,11 @@ type SessionInfo = {
   scanningEnabled: boolean;
   lifecycleStatus: string | null;
 };
+
+// Short tables keep the big bold look; long ones (e.g. "1, 2, 3, ... 20") get a smaller font and wrap.
+function tableSizeCls(table: string | null | undefined, big: string, small: string): string {
+  return (table?.length ?? 0) > TABLE_LONG_THRESHOLD ? `${small} leading-snug` : big;
+}
 
 type ScanResult =
   | { kind: 'granted'; serial: string | null; tag: string | null; table?: string | null; at: string | null; usageCount?: number; usageLimit?: number | null }
@@ -616,7 +622,7 @@ export default function ScannerPage() {
                       <p className="text-2xl font-black tracking-wide">ACCESS GRANTED ✓</p>
                       {result.tag && <p className="mt-1.5 text-base font-semibold">{result.tag}</p>}
                       {result.table && (
-                        <p className="mx-auto mt-2 w-fit max-w-full rounded-xl bg-white px-4 py-1.5 text-xl font-black text-emerald-700" data-testid="scan-table">
+                        <p className={`mx-auto mt-2 w-fit max-w-full break-words rounded-xl bg-white px-4 py-1.5 font-black text-emerald-700 ${tableSizeCls(result.table, 'text-xl', 'text-base')}`} data-testid="scan-table">
                           TABLE {result.table}
                         </p>
                       )}
@@ -635,7 +641,7 @@ export default function ScannerPage() {
                       <p className="mt-1.5 text-sm">{result.message}</p>
                       {result.tag && <p className="mt-1 text-sm font-semibold">{result.tag}</p>}
                       {result.table && (
-                        <p className="mx-auto mt-1.5 w-fit max-w-full rounded-lg bg-white px-3 py-1 text-base font-black text-red-700" data-testid="scan-table">
+                        <p className={`mx-auto mt-1.5 w-fit max-w-full break-words rounded-lg bg-white px-3 py-1 font-black text-red-700 ${tableSizeCls(result.table, 'text-base', 'text-sm')}`} data-testid="scan-table">
                           TABLE {result.table}
                         </p>
                       )}

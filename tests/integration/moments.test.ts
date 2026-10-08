@@ -1,5 +1,8 @@
 import { beforeAll, afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { FieldValue } from 'firebase-admin/firestore';
 import { makeDb, seedEvent, EV1, EV2 } from './helpers';
+
+const firestoreDelete = () => FieldValue.delete();
 
 // R2 is an external service: replace ONLY it with an in-memory fake. Every
 // other layer (Firestore, caps, ownership, scoping) runs for real.
@@ -61,6 +64,27 @@ describe.skipIf(!hasEmu)('guest moments service', () => {
     await db!.db.collection('events').doc(EV2).update({ lifecycleStatus: 'archived' });
     expect(await svc.resolveEventBySlug(db!.db, 'other-event')).toMatchObject({ open: false });
     await db!.db.collection('events').doc(EV2).update({ lifecycleStatus: 'open' });
+  });
+
+  it('guest link switch: live by default, off when deactivated, back on when re-activated', async () => {
+    const ref = db!.db.collection('events').doc(EV2);
+    // an event that never had the field (every link made before the switch) stays live
+    expect((await ref.get()).data()!.momentsGuestLinkEnabled).toBeUndefined();
+    expect(await svc.resolveEventBySlug(db!.db, 'other-event')).toMatchObject({ open: true });
+
+    await ref.update({ momentsGuestLinkEnabled: false });
+    expect(await svc.resolveEventBySlug(db!.db, 'other-event')).toMatchObject({ open: false });
+    // a deactivated link refuses NEW uploads
+    const blocked = await svc.resolveEventBySlug(db!.db, 'other-event');
+    expect(blocked && blocked.open).toBe(false);
+
+    await ref.update({ momentsGuestLinkEnabled: true });
+    expect(await svc.resolveEventBySlug(db!.db, 'other-event')).toMatchObject({ open: true });
+
+    // archived still wins even when the switch says live
+    await ref.update({ lifecycleStatus: 'archived' });
+    expect(await svc.resolveEventBySlug(db!.db, 'other-event')).toMatchObject({ open: false });
+    await ref.update({ lifecycleStatus: 'open', momentsGuestLinkEnabled: firestoreDelete() });
   });
 
   it('single upload: pending until R2 really has the object, then ready', async () => {

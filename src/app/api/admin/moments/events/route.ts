@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
         id: d.id, name: String(data.name ?? ''), slug: canShare ? slug : null,
         eventDate: data.eventDate?.toDate?.()?.toISOString?.() ?? null,
         count, guestLink: canShare && slug ? guestMomentsUrl(slug) : null,
+        guestLinkEnabled: data.momentsGuestLinkEnabled !== false,
       };
     }));
     return NextResponse.json({ ok: true, events, canShare });

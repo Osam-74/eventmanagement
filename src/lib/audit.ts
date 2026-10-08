@@ -29,7 +29,8 @@ export type AuditAction =
   | 'MOMENTS_DELETED'
   | 'MOMENTS_SLIDES_ADDED'
   | 'MOMENTS_SLIDE_DELETED'
-  | 'MOMENTS_EXPORTED';
+  | 'MOMENTS_EXPORTED'
+  | 'MOMENTS_GUEST_LINK_TOGGLED';
 
 export async function writeAudit(action: AuditAction, actor: string, detail: Record<string, unknown>) {
   await db()

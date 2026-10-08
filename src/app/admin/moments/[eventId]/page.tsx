@@ -10,7 +10,7 @@ import { GuestLinkPanel } from '@/components/GuestLinkPanel';
 import { SlideshowSettings } from '@/components/SlideshowSettings';
 
 type Folder = { guestId: string; label: string; count: number; photos: number; videos: number; bytes: number; lastAt: string | null };
-type EventInfo = { id: string; name: string; slug: string | null; eventDate: string | null; count: number; guestLink: string | null };
+type EventInfo = { id: string; name: string; slug: string | null; eventDate: string | null; count: number; guestLink: string | null; guestLinkEnabled?: boolean };
 
 const fmtSize = (b: number) => (b >= 1024 ** 3 ? `${(b / 1024 ** 3).toFixed(2)} GB` : b >= 1024 ** 2 ? `${(b / 1024 ** 2).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
 
@@ -106,7 +106,9 @@ function EventMomentsInner() {
       {/* ---- Link & QR tab (only with canShareMoments) ---- */}
       {!guest && tab === 'share' && canShare && (
         event?.guestLink && event.slug
-          ? <GuestLinkPanel link={event.guestLink} eventSlug={event.slug} copied={copied} setCopied={setCopied} />
+          ? <GuestLinkPanel link={event.guestLink} eventSlug={event.slug} copied={copied} setCopied={setCopied}
+              eventId={eventId} enabled={event.guestLinkEnabled !== false}
+              onEnabledChange={(v) => setEvent((cur) => (cur ? { ...cur, guestLinkEnabled: v } : cur))} />
           : <p className="text-sm text-brand-navy-700/60">Loading…</p>
       )}
 

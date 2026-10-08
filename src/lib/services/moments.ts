@@ -57,6 +57,9 @@ export async function resolveEventBySlug(firestore: Firestore, slug: string) {
   const data = d.data();
   // Archived / deleted events do not accept new uploads.
   if (data.lifecycleStatus && data.lifecycleStatus !== 'open') return { id: d.id, name: data.name as string, open: false };
+  // An admin can switch the guest link off on its own. Missing = live, so every
+  // link that existed before this switch keeps working untouched.
+  if (data.momentsGuestLinkEnabled === false) return { id: d.id, name: data.name as string, open: false };
   return { id: d.id, name: data.name as string, open: true };
 }
 

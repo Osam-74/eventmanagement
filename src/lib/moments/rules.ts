@@ -100,3 +100,47 @@ export function uniqueZipNames(names: string[]): string[] {
     return dot > 0 ? `${n.slice(0, dot)} (${count})${n.slice(dot)}` : `${n} (${count})`;
   });
 }
+
+/** Longest guest name we keep. Short enough for a folder title on a phone. */
+export const MAX_GUEST_NAME = 40;
+
+/**
+ * A guest may optionally give their name. It is public free text that ends up
+ * in the admin gallery and zip folder names, so it is cleaned here (on the
+ * client for the courtesy preview, and again on the SERVER which is the one
+ * that counts): control characters and path/markup characters are removed,
+ * whitespace collapsed, length capped. Returns '' when nothing usable is left,
+ * which means "anonymous" and falls back to "Guest N".
+ */
+export function cleanGuestName(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  const cleaned = raw
+    .normalize('NFC')
+    .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]/g, ' ') // control + invisible / bidi
+    .replace(/[<>\\/"`{}|^~[\]]/g, '') // markup, paths, brackets
+    .replace(/\s+/g, ' ')
+    .trim();
+  // Cut on a code-point boundary so an emoji or accent is never split in half.
+  const cut = Array.from(cleaned).slice(0, MAX_GUEST_NAME).join('').trim();
+  return cut;
+}
+
+/**
+ * Folder labels for the admin gallery. A guest who gave a name shows it;
+ * anonymous guests keep "Guest 1, Guest 2…" counted among the anonymous ones
+ * only, in order of first upload. Two different guests with the same name stay
+ * separate folders and are told apart as "Tunde", "Tunde (2)" (the same
+ * convention the export zip uses for duplicate file names).
+ * `guests` must already be in first-upload order.
+ */
+export function folderLabels(guests: { name: string }[]): string[] {
+  let anonymous = 0;
+  const seen = new Map<string, number>();
+  return guests.map((g) => {
+    if (!g.name) return `Guest ${++anonymous}`;
+    const key = g.name.toLowerCase();
+    const n = (seen.get(key) ?? 0) + 1;
+    seen.set(key, n);
+    return n === 1 ? g.name : `${g.name} (${n})`;
+  });
+}

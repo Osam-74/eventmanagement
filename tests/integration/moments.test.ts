@@ -247,6 +247,50 @@ describe.skipIf(!hasEmu)('guest moments service', () => {
     expect((await db!.db.collection('moments').doc(theirs).get()).exists).toBe(true);
   });
 
+  describe('optional guest name', () => {
+    const named = (guestId: string, guestName: string | undefined, files: { name: string; type: string; size: number }[]) =>
+      svc.startUploads(db!.db, { eventId: EV1, guestId, guestName, files });
+    const docOf = async (r: Awaited<ReturnType<typeof named>>) => {
+      const u = (r as { uploads: Extract<svc.StartedUpload, { ok: true }>[] }).uploads[0];
+      return (await db!.db.collection('moments').doc(u.momentId).get()).data()!;
+    };
+    const JPG = [{ name: 'IMG_1.jpg', type: 'image/jpeg', size: 1 * MB }];
+
+    it('stores the name the guest gave on the upload', async () => {
+      const d = await docOf(await named('namedguest-aaaaaaaa1', 'Tunde Bello', JPG));
+      expect(d.guestName).toBe('Tunde Bello');
+    });
+
+    it('an anonymous upload stores no name at all (no empty field, no placeholder)', async () => {
+      for (const v of [undefined, '', '   ']) {
+        const d = await docOf(await named('anonguest-aaaaaaaaa1', v, JPG));
+        expect('guestName' in d).toBe(false);
+      }
+    });
+
+    it('the SERVER cleans the name, whatever the browser sent', async () => {
+      const d = await docOf(await named('hostile-aaaaaaaaaaaa1', '  <b>Tunde</b>\u0000  /Bello\n' + 'x'.repeat(300), JPG));
+      expect(d.guestName).not.toMatch(/[<>/\u0000\n]/);
+      expect(d.guestName.length).toBeLessThanOrEqual(40);
+      expect(d.guestName.startsWith('bTundeb Bello')).toBe(true);
+    });
+
+    it('big videos (multipart) carry the name too', async () => {
+      const d = await docOf(await named('namedbig-aaaaaaaaa1', 'Aunty Bisi', [{ name: 'dance.mp4', type: 'video/mp4', size: 100 * MB }]));
+      expect(d.guestName).toBe('Aunty Bisi');
+      expect(d.uploadId).toBeTruthy();
+    });
+
+    it('giving a name does not change the per-guest cap or the guest id', async () => {
+      const g = 'capnamed-aaaaaaaaaa1';
+      const many = Array.from({ length: MAX_FILES_PER_GUEST }, (_, i) => ({ name: `f${i}.jpg`, type: 'image/jpeg', size: 1000 }));
+      for (let off = 0; off < many.length; off += 20) await named(g, 'Tunde', many.slice(off, off + 20));
+      // same device, different typed name: still the same guest, still capped
+      const r = await named(g, 'Someone Else', JPG);
+      expect(r).toMatchObject({ ok: false });
+    });
+  });
+
   it('guest id validation', () => {
     expect(svc.isValidGuestId('abcdefghijklmnop')).toBe(true);
     for (const bad of ['short', '', null, undefined, 42, 'has space in it here!!', 'a'.repeat(65), '../../etc/passwd/xxxx']) expect(svc.isValidGuestId(bad)).toBe(false);

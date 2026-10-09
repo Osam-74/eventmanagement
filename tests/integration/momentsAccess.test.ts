@@ -232,3 +232,62 @@ describe.skipIf(!hasEmu)('backfill: existing admins keep Guest moments access', 
     expect(d.permissions.canDeleteMoments).toBe(false);
   });
 });
+
+describe.skipIf(!hasEmu)('guest names in folders', () => {
+  const EVN = 'ev-names-1';
+  const G = (n: number) => `named-${n}-aaaaaaaaaaaaaaaaaaa`;
+  let n = 0;
+  async function put(guestId: string, at: number, guestName?: string, status = 'ready') {
+    const id = `nm${++n}`;
+    await db!.db.collection('moments').doc(id).set({
+      eventId: EVN, guestId, ...(guestName !== undefined ? { guestName } : {}), key: `k/${id}`, kind: 'photo', contentType: 'image/jpeg',
+      originalName: `${id}.jpg`, declaredSize: 10, size: 10, status, uploadId: null,
+      createdAt: FieldValue.serverTimestamp(), completedAt: status === 'ready' ? Timestamp.fromMillis(at) : null,
+    });
+  }
+  beforeAll(async () => {
+    await seedEvent(db!.db, EVN, { slug: 'names', code: 'NAM' });
+    await put(G(1), 1000);                 // anonymous, first
+    await put(G(2), 2000, 'Tunde Bello');  // named
+    await put(G(3), 3000);                 // anonymous
+    await put(G(4), 4000, '');             // empty string stored = anonymous
+    await put(G(5), 5000, 'Bisi');         // named
+    await put(G(5), 6000, 'Bisi Adeyemi'); // same guest later gives a fuller / corrected name
+    await put(G(5), 7000);                 // ...then uploads again WITHOUT a name: keep the last name given
+    await put(G(6), 8000, 'Tunde Bello');  // a DIFFERENT guest with the same name
+    await put(G(7), 9000, 'Ghost', 'pending'); // never completed: must not name or create a folder
+  });
+
+  it('shows the guest\'s name, and numbers only the anonymous guests', async () => {
+    const { folders } = await listGuestFolders(db!.db, EVN);
+    expect(folders.map((f) => f.label)).toEqual(['Guest 1', 'Tunde Bello', 'Guest 2', 'Guest 3', 'Bisi Adeyemi', 'Tunde Bello (2)']);
+    expect(folders.map((f) => f.named)).toEqual([false, true, false, false, true, true]);
+  });
+
+  it('a guest who later gives a name takes the latest one, and a later upload without a name does not erase it', async () => {
+    const { folders } = await listGuestFolders(db!.db, EVN);
+    const bisi = folders.find((f) => f.guestId === G(5))!;
+    expect(bisi.label).toBe('Bisi Adeyemi');
+    expect(bisi.count).toBe(3);
+  });
+
+  it('a pending (never completed) upload neither creates a folder nor sets a name', async () => {
+    const { folders } = await listGuestFolders(db!.db, EVN);
+    expect(folders.some((f) => f.guestId === G(7))).toBe(false);
+    expect(folders.some((f) => f.label === 'Ghost')).toBe(false);
+  });
+
+  it('a name never changes which files belong to a folder (folders are opened by guest id)', async () => {
+    const r = await listMoments(db!.db, { eventId: EVN, limit: 48, guestId: G(2) });
+    expect(r.total).toBe(1);
+    const dupe = await listMoments(db!.db, { eventId: EVN, limit: 48, guestId: G(6) });
+    expect(dupe.total).toBe(1); // the second "Tunde Bello" is NOT merged into the first
+  });
+
+  it('stored names are cleaned again on read (older or hand-edited records cannot inject markup)', async () => {
+    await put(G(8), 10000, '<img src=x onerror=alert(1)>');
+    const { folders } = await listGuestFolders(db!.db, EVN);
+    const f = folders.find((x) => x.guestId === G(8))!;
+    expect(f.label).not.toMatch(/[<>]/);
+  });
+});

@@ -252,6 +252,8 @@ const guestId = z.string().regex(/^[A-Za-z0-9_-]{16,64}$/, 'Invalid guest id');
 
 export const momentsStartSchema = z.object({
   guestId,
+  /** Optional. Cleaned again on the server; '' / missing = anonymous. */
+  guestName: z.string().max(200).optional(),
   files: z
     .array(z.object({ name: z.string().max(200), type: z.string().max(100), size: z.number().int().min(1).max(100 * 1024 * 1024) }))
     .min(1)

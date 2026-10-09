@@ -2,7 +2,8 @@
 
 import { use, useCallback, useEffect, useRef, useState } from 'react';
 import { GuestSlideshowBackground } from '@/components/GuestSlideshowBackground';
-import { CONCURRENCY, getGuestId, runPool, uploadOne, type Started } from '@/lib/client/momentsUpload';
+import { CONCURRENCY, getGuestId, getSavedGuestName, saveGuestName, runPool, uploadOne, type Started } from '@/lib/client/momentsUpload';
+import { cleanGuestName, MAX_GUEST_NAME } from '@/lib/moments/rules';
 
 /**
  * Public guest page: ONE upload area and nothing else. Tapping it opens the
@@ -30,11 +31,15 @@ export default function MomentsPage({ params }: { params: Promise<{ slug: string
   const [closed, setClosed] = useState<string | null>(null);
   const [slides, setSlides] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [guestName, setGuestName] = useState('');
   const guestIdRef = useRef<string>('');
+  const guestNameRef = useRef('');
   const urlsRef = useRef<string[]>([]);
 
   useEffect(() => {
     guestIdRef.current = getGuestId();
+    const saved = getSavedGuestName();
+    setGuestName(saved); guestNameRef.current = saved;
     fetch(`/api/moments/${encodeURIComponent(slug)}/info`)
       .then((r) => r.json())
       .then((b) => {
@@ -52,6 +57,9 @@ export default function MomentsPage({ params }: { params: Promise<{ slug: string
     e.target.value = ''; // allow picking the same file again
     if (!files.length) return;
     setNotice(null);
+    // Commit whatever is in the box now (the field may not have lost focus yet).
+    const name = cleanGuestName(guestNameRef.current);
+    setGuestName(name); guestNameRef.current = name; saveGuestName(name);
 
     const fresh: Item[] = files.map((f, i) => {
       const url = URL.createObjectURL(f);
@@ -72,7 +80,7 @@ export default function MomentsPage({ params }: { params: Promise<{ slug: string
       try {
         const res = await fetch(`/api/moments/${encodeURIComponent(slug)}/start`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ guestId: guestIdRef.current, files: batch.map((f) => ({ name: f.name, type: f.type, size: f.size })) }),
+          body: JSON.stringify({ guestId: guestIdRef.current, guestName: name, files: batch.map((f) => ({ name: f.name, type: f.type, size: f.size })) }),
         });
         const body = await res.json();
         if (!body.ok) { keys.forEach((k) => patch(k, { status: 'error', message: body.message })); setNotice(body.message); continue; }
@@ -111,6 +119,23 @@ export default function MomentsPage({ params }: { params: Promise<{ slug: string
         <p className={`mt-16 text-center ${bg ? 'rounded-2xl bg-black/50 px-4 py-6 text-white backdrop-blur' : 'text-brand-navy-800'}`}>{closed}</p>
       ) : (
         <>
+          <div className={`mb-4 rounded-2xl px-4 py-3 ${bg ? 'bg-white/90 backdrop-blur' : 'border border-brand-ice-200 bg-white'}`}>
+            <label htmlFor="guest-name" className="block text-sm font-medium text-brand-navy-900">
+              Your name <span className="font-normal text-brand-navy-700/60">(optional)</span>
+            </label>
+            <input
+              id="guest-name"
+              type="text"
+              inputMode="text"
+              autoComplete="name"
+              maxLength={MAX_GUEST_NAME}
+              value={guestName}
+              onChange={(e) => { setGuestName(e.target.value); guestNameRef.current = e.target.value; }}
+              onBlur={() => { const c = cleanGuestName(guestName); setGuestName(c); guestNameRef.current = c; saveGuestName(c); }}
+              placeholder="So the hosts know whose photos these are"
+              className="mt-1 w-full rounded-lg border border-brand-ice-200 px-3 py-2 text-base text-brand-navy-900 placeholder:text-brand-navy-700/40 focus:border-brand-blue-500 focus:outline-none focus:ring-2 focus:ring-brand-blue-500/30"
+            />
+          </div>
           <input ref={inputRef} type="file" accept={ACCEPT} multiple onChange={onPick} className="sr-only" aria-label="Choose photos and videos" />
           <button
             type="button"

@@ -136,3 +136,15 @@ export function getGuestId(): string {
     return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   }
 }
+
+const NAME_KEY = 'moments_guest_name';
+
+/** The name this guest gave on this device before (optional), or ''. */
+export function getSavedGuestName(): string {
+  try { return localStorage.getItem(NAME_KEY) ?? ''; } catch { return ''; }
+}
+
+/** Remember (or forget, when empty) the guest's name on this device only. */
+export function saveGuestName(name: string): void {
+  try { if (name) localStorage.setItem(NAME_KEY, name); else localStorage.removeItem(NAME_KEY); } catch { /* private mode: just not remembered */ }
+}

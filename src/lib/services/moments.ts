@@ -3,7 +3,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { randomBytes } from 'crypto';
 import * as r2 from '@/lib/moments/r2';
 import {
-  checkFile, planUpload, buildKey, safeDisplayName,
+  checkFile, planUpload, buildKey, safeDisplayName, cleanGuestName, folderLabels,
   MAX_FILE_BYTES, MAX_FILES_PER_GUEST, MAX_FILES_PER_BATCH,
 } from '@/lib/moments/rules';
 
@@ -25,6 +25,8 @@ export type MomentStatus = 'pending' | 'ready';
 export type MomentDoc = {
   eventId: string;
   guestId: string;
+  /** Optional name the guest gave (already cleaned). Absent / '' = anonymous. */
+  guestName?: string;
   key: string;
   kind: 'photo' | 'video';
   contentType: string;
@@ -65,9 +67,10 @@ export async function resolveEventBySlug(firestore: Firestore, slug: string) {
 
 export async function startUploads(
   firestore: Firestore,
-  input: { eventId: string; guestId: string; files: StartFileInput[] }
+  input: { eventId: string; guestId: string; guestName?: string; files: StartFileInput[] }
 ): Promise<{ ok: true; uploads: StartedUpload[] } | { ok: false; message: string }> {
   const { eventId, guestId, files } = input;
+  const guestName = cleanGuestName(input.guestName);
   if (!files.length) return { ok: false, message: 'Choose at least one photo or video.' };
   if (files.length > MAX_FILES_PER_BATCH) {
     return { ok: false, message: `Please upload up to ${MAX_FILES_PER_BATCH} files at a time.` };
@@ -96,14 +99,14 @@ export async function startUploads(
     try {
       if (plan.mode === 'single') {
         const url = await r2.presignPut(key, check.contentType);
-        await ref.set(baseDoc({ eventId, guestId, key, check, f, uploadId: null }));
+        await ref.set(baseDoc({ eventId, guestId, guestName, key, check, f, uploadId: null }));
         uploads.push({ ok: true, momentId, name: f.name, mode: 'single', url, contentType: check.contentType });
       } else {
         const uploadId = await r2.createMultipart(key, check.contentType);
         const parts = await Promise.all(
           Array.from({ length: plan.parts }, async (_, i) => ({ partNumber: i + 1, url: await r2.presignPart(key, uploadId, i + 1) }))
         );
-        await ref.set(baseDoc({ eventId, guestId, key, check, f, uploadId }));
+        await ref.set(baseDoc({ eventId, guestId, guestName, key, check, f, uploadId }));
         uploads.push({ ok: true, momentId, name: f.name, mode: 'multipart', contentType: check.contentType, partSize: plan.partSize, parts });
       }
     } catch (e) {
@@ -115,11 +118,11 @@ export async function startUploads(
 }
 
 function baseDoc(a: {
-  eventId: string; guestId: string; key: string; f: StartFileInput; uploadId: string | null;
+  eventId: string; guestId: string; guestName: string; key: string; f: StartFileInput; uploadId: string | null;
   check: { kind: 'photo' | 'video'; contentType: string; ext: string };
 }): MomentDoc {
   return {
-    eventId: a.eventId, guestId: a.guestId, key: a.key,
+    eventId: a.eventId, guestId: a.guestId, ...(a.guestName ? { guestName: a.guestName } : {}), key: a.key,
     kind: a.check.kind, contentType: a.check.contentType,
     originalName: safeDisplayName(a.f.name, a.check.ext),
     declaredSize: a.f.size, size: null, status: 'pending', uploadId: a.uploadId,
@@ -241,38 +244,43 @@ function toDTO(id: string, m: Omit<MomentDoc, 'createdAt' | 'completedAt'> & { c
   };
 }
 
-export type GuestFolder = { guestId: string; label: string; count: number; photos: number; videos: number; bytes: number; lastAt: string | null };
+export type GuestFolder = { guestId: string; label: string; named: boolean; count: number; photos: number; videos: number; bytes: number; lastAt: string | null };
 
 /**
- * One folder per guest. Labels are "Guest 1, Guest 2…" in order of each
- * guest's FIRST upload, so a folder keeps its number as more arrive. The
- * real guest id is anonymous; nothing about the person is stored or shown.
+ * One folder per guest. A guest who gave their name is shown by it; everyone
+ * else is "Guest 1, Guest 2…" counted among the anonymous guests, in order of
+ * each guest's FIRST upload, so a folder keeps its number as more arrive. A
+ * guest who uploads again later with a name takes the LATEST name they gave
+ * (a typo can be fixed). The guest id itself stays random and anonymous.
  */
 export async function listGuestFolders(firestore: Firestore, eventId: string): Promise<{ folders: GuestFolder[]; total: number }> {
   const base = firestore.collection('moments').where('eventId', '==', eventId).where('status', '==', 'ready');
-  const acc = new Map<string, { count: number; photos: number; videos: number; bytes: number; first: number; last: number }>();
+  const acc = new Map<string, { count: number; photos: number; videos: number; bytes: number; first: number; last: number; name: string; nameAt: number }>();
   let cursor: FirebaseFirestore.QueryDocumentSnapshot | null = null;
   for (;;) {
     let q = base.orderBy('completedAt', 'asc').limit(500);
     if (cursor) q = q.startAfter(cursor);
     const snap = await q.get();
     for (const d of snap.docs) {
-      const m = d.data() as { guestId: string; kind: 'photo' | 'video'; size?: number | null; completedAt?: FirebaseFirestore.Timestamp };
+      const m = d.data() as { guestId: string; guestName?: string; kind: 'photo' | 'video'; size?: number | null; completedAt?: FirebaseFirestore.Timestamp };
       const t = m.completedAt?.toMillis?.() ?? 0;
-      const g = acc.get(m.guestId) ?? { count: 0, photos: 0, videos: 0, bytes: 0, first: t, last: t };
+      const g = acc.get(m.guestId) ?? { count: 0, photos: 0, videos: 0, bytes: 0, first: t, last: t, name: '', nameAt: -1 };
       g.count++; if (m.kind === 'video') g.videos++; else g.photos++;
       g.bytes += m.size ?? 0; g.first = Math.min(g.first, t); g.last = Math.max(g.last, t);
+      // Re-clean what is stored (older / hand-edited docs) and keep the newest non-empty name.
+      const nm = cleanGuestName(m.guestName);
+      if (nm && t >= g.nameAt) { g.name = nm; g.nameAt = t; }
       acc.set(m.guestId, g);
     }
     if (snap.docs.length < 500) break;
     cursor = snap.docs[snap.docs.length - 1];
   }
-  const folders = [...acc.entries()]
-    .sort((a, b) => a[1].first - b[1].first)
-    .map(([guestId, g], i) => ({
-      guestId, label: `Guest ${i + 1}`, count: g.count, photos: g.photos, videos: g.videos, bytes: g.bytes,
-      lastAt: g.last ? new Date(g.last).toISOString() : null,
-    }));
+  const ordered = [...acc.entries()].sort((a, b) => a[1].first - b[1].first);
+  const labels = folderLabels(ordered.map(([, g]) => ({ name: g.name })));
+  const folders = ordered.map(([guestId, g], i) => ({
+    guestId, label: labels[i], named: !!g.name, count: g.count, photos: g.photos, videos: g.videos, bytes: g.bytes,
+    lastAt: g.last ? new Date(g.last).toISOString() : null,
+  }));
   return { folders, total: folders.reduce((n, f) => n + f.count, 0) };
 }
 

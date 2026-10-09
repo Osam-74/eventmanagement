@@ -19,7 +19,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ slug: stri
   if (!event) return NextResponse.json({ ok: false, message: 'This upload link is not valid.' }, { status: 404 });
   if (!event.open) return NextResponse.json({ ok: false, message: 'Uploads are closed for this event.' }, { status: 403 });
 
-  const out = await startUploads(db(), { eventId: event.id, guestId: parsed.data.guestId, files: parsed.data.files });
+  const out = await startUploads(db(), { eventId: event.id, guestId: parsed.data.guestId, guestName: parsed.data.guestName, files: parsed.data.files });
   if (!out.ok) return NextResponse.json({ ok: false, message: out.message }, { status: 400 });
   return NextResponse.json({ ok: true, uploads: out.uploads });
 }

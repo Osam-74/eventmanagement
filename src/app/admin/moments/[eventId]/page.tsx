@@ -131,7 +131,7 @@ function EventMomentsInner() {
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="text-brand-blue-500" aria-hidden>
                     <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
                   </svg>
-                  <p className="mt-2 font-medium text-brand-navy-900">{f.label}</p>
+                  <p className="mt-2 break-words font-medium text-brand-navy-900">{f.label}</p>
                   <p className="text-xs text-brand-navy-700/70">
                     {f.count} file{f.count === 1 ? '' : 's'}
                     {f.photos > 0 && ` · ${f.photos} photo${f.photos === 1 ? '' : 's'}`}
